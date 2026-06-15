@@ -151,6 +151,36 @@ public final class StasisBotConfig {
 		return found != null ? found : List.of();
 	}
 
+	/** Read-only snapshot of every mapping (player → keywords), for the GUI. */
+	public Map<String, List<String>> aliases() {
+		return aliases == null ? Map.of() : new LinkedHashMap<>(aliases);
+	}
+
+	/**
+	 * Add or replace a mapping. Player name and keywords are lower-cased and
+	 * trimmed; blank keywords are dropped. An empty keyword list removes the
+	 * mapping entirely. Persists immediately.
+	 */
+	public void putAlias(String player, List<String> keywords) {
+		if (player == null || player.isBlank()) return;
+		if (aliases == null) aliases = new LinkedHashMap<>();
+		String key = player.trim().toLowerCase();
+		List<String> clean = keywords == null ? List.of() : keywords.stream()
+				.map(s -> s == null ? "" : s.trim().toLowerCase())
+				.filter(s -> !s.isBlank())
+				.distinct()
+				.toList();
+		if (clean.isEmpty()) aliases.remove(key);
+		else aliases.put(key, clean);
+		save();
+	}
+
+	/** Remove a player's mapping if present. Persists immediately. */
+	public void removeAlias(String player) {
+		if (player == null || aliases == null) return;
+		if (aliases.remove(player.trim().toLowerCase()) != null) save();
+	}
+
 	// --- persistence ---------------------------------------------------------
 
 	public static StasisBotConfig load() {

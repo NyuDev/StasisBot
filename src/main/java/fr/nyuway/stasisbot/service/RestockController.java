@@ -30,7 +30,7 @@ final class RestockController {
 	private static final int RESTOCK_RADIUS = 4;
 	/** How long to wait (ms) for a chest screen to open after interacting. */
 	private static final long RESTOCK_SCREEN_TIMEOUT = 2000L;
-	/** Restock only when the bot's pearl count drops below this. */
+	/** Restock once the bot's pearl count drops to this or below. */
 	private static final int REFILL_THRESHOLD = 8;
 	/** Refill up to (never above) this many pearls. */
 	private static final int REFILL_TARGET = 16;
@@ -59,7 +59,7 @@ final class RestockController {
 	 * returns {@code false} there is nothing to do.
 	 */
 	boolean begin() {
-		if (!(config.dropPearlForPlayer() && countPearls() < REFILL_THRESHOLD)) return false;
+		if (!(config.dropPearlForPlayer() && countPearls() <= REFILL_THRESHOLD)) return false;
 		ClientPlayerEntity self = client.player;
 		ClientWorld world = client.world;
 		if (self == null || world == null) return false;

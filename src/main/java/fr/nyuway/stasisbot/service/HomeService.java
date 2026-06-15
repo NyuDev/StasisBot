@@ -136,7 +136,10 @@ public final class HomeService {
 	/** Entry point from the chat listener (may be invoked off the client thread). */
 	public void onHomeRequest(String senderName) {
 		if (senderName == null || senderName.isBlank()) return;
-		if (requests.shouldDebounce(senderName)) return;
+		if (requests.shouldDebounce(senderName)) {
+			StasisBot.LOGGER.info("[home] '{}' debounced (duplicate within window)", senderName);
+			return;
+		}
 		client.execute(() -> enqueue(senderName));
 	}
 
@@ -144,8 +147,15 @@ public final class HomeService {
 		ClientPlayerEntity self = client.player;
 		if (self == null) return;
 		if (senderName.equalsIgnoreCase(self.getGameProfile().name())) return; // ignore the bot itself
-		if (senderName.equalsIgnoreCase(currentSender)) return;                // already being served
-		if (!requests.offer(senderName)) return;                               // already queued
+		if (senderName.equalsIgnoreCase(currentSender)) {                      // already being served
+			StasisBot.LOGGER.info("[home] '{}' ignored — already being served", senderName);
+			return;
+		}
+		if (!requests.offer(senderName)) {                                     // already queued
+			StasisBot.LOGGER.info("[home] '{}' ignored — already queued", senderName);
+			return;
+		}
+		StasisBot.LOGGER.info("[home] '{}' enqueued (queue size {})", senderName, requests.size());
 
 		int ahead = requests.size() - 1 + (phase != Phase.IDLE ? 1 : 0);
 		if (ahead > 0) {
@@ -210,6 +220,9 @@ public final class HomeService {
 			startReturn(); // still return home if the bot already moved for a previous request
 			return;
 		}
+
+		StasisBot.LOGGER.info("[home] serving '{}' — {} matching chamber(s), {} loaded, pearls in inv: {}",
+				sender, matches.size(), candidates.size(), PlayerActions.countPearls(client));
 
 		candidateIdx = 0;
 		currentTarget = candidates.get(0);
@@ -368,6 +381,7 @@ public final class HomeService {
 
 		if (activator.fire(client, currentTarget)) {
 			StasisBot.LOGGER.info("Fired '{}' for '{}'", currentTarget.label(), currentSender);
+			feedback.debug(currentSender + ": fired '" + currentTarget.label() + "'");
 			feedback.notifySelf("§a[StasisBot] §f" + currentSender + "§a → released §f" + currentTarget.label());
 			fireAt = now;
 			phase = Phase.VERIFY;
@@ -377,7 +391,7 @@ public final class HomeService {
 		}
 	}
 
-	/** Confirm the player materialised; if not within the window, try another trap. */
+	/** Confirm the player materialised; re-arm and head home either way. */
 	private void driveVerify() {
 		if (client.world == null || client.player == null || currentTarget == null) { startReturn(); return; }
 
@@ -390,11 +404,11 @@ public final class HomeService {
 		}
 
 		if (System.currentTimeMillis() - fireAt > config.arrivalTimeoutMillis()) {
-			if (advanceCandidate()) {
-				feedback.whisper(currentSender, Messages.Key.RETRYING);
-				commitTarget(false);
-				return;
-			}
+			// We've already fired one chamber and released the player's pearl. Never
+			// fire a second candidate here: the player only ever uses one pearl per
+			// teleport, so firing another chamber would just drop a second pearl on
+			// the ground. Proceed to re-arm the trap we fired and head home, even if
+			// arrival couldn't be confirmed within the window.
 			feedback.whisper(currentSender, Messages.Key.NOT_CONFIRMED);
 			phase = Phase.AFTER; // still reset the trap, then head home
 		}
@@ -413,11 +427,15 @@ public final class HomeService {
 
 		long now = System.currentTimeMillis();
 
-		// Give the player their fresh pearl right away, while they're still close.
+		// Hand the player exactly ONE fresh pearl. Firing the trap consumed the pearl
+		// that was suspended in the chamber they just teleported to, so THAT chamber is
+		// now empty and they need a pearl to re-arm it. One teleport = one pearl, always —
+		// any other stasis they keep elsewhere is irrelevant (it wasn't the one consumed).
 		if (!pearlGiven && config.dropPearlForPlayer() && PlayerActions.hasPearl(client)) {
 			PlayerActions.faceToward(client, currentSender);
 			boolean dropped = PlayerActions.dropPearl(client);
-			feedback.debug("Drop pearl for " + currentSender + ": " + (dropped ? "OK" : "FAILED"));
+			feedback.debug(currentSender + ": drop 1 pearl — " + (dropped ? "OK" : "FAILED")
+					+ " (inv " + PlayerActions.countPearls(client) + ")");
 			pearlGiven = true;
 		}
 

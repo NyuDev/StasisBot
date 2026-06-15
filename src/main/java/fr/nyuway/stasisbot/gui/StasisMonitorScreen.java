@@ -11,13 +11,14 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Status + quick-config panel (opened with the keybind). Shows what the bot
- * currently detects and lets you flip the common toggles — drop pearl, reopen
- * trap, return home, language — without typing any command. Each toggle persists
- * to disk immediately via the config setters.
+ * Status + quick-config panel (opened with the keybind). The left column lists
+ * the stasis chambers the bot currently detects — click one to map it to a
+ * player. The right column flips the common toggles and opens the mapping
+ * editor. Every change persists to disk immediately via the config setters.
  */
 public final class StasisMonitorScreen extends Screen {
 
@@ -34,26 +35,73 @@ public final class StasisMonitorScreen extends Screen {
 
 	@Override
 	protected void init() {
+		buildToggles();
+		buildChamberButtons();
+	}
+
+	// --- right column: toggles & actions ------------------------------------
+
+	private void buildToggles() {
 		int bw = 150;
 		int bh = 20;
-		int x = width / 2 - bw / 2;
-		int y = height - 180;
+		int x = width - bw - 20;
+		int y = 30;
+		int step = 22;
 
 		addToggle(x, y, bw, bh, "Drop pearl", config::dropPearlForPlayer, config::setDropPearlForPlayer);
-		addToggle(x, y + 24, bw, bh, "Reopen trap", config::reopenTrigger, config::setReopenTrigger);
-		addToggle(x, y + 48, bw, bh, "Return home", config::returnHome, config::setReturnHome);
-		addToggle(x, y + 72, bw, bh, "Require online", config::requireOnline, config::setRequireOnline);
-		addToggle(x, y + 96, bw, bh, "Debug", config::debug, config::setDebug);
-		addMovementToggle(x, y + 120, bw, bh);
+		addToggle(x, y += step, bw, bh, "Reopen trap", config::reopenTrigger, config::setReopenTrigger);
+		addToggle(x, y += step, bw, bh, "Return home", config::returnHome, config::setReturnHome);
+		addToggle(x, y += step, bw, bh, "Require online", config::requireOnline, config::setRequireOnline);
+		addToggle(x, y += step, bw, bh, "Debug", config::debug, config::setDebug);
+		addMovementToggle(x, y += step, bw, bh);
 
 		addDrawableChild(ButtonWidget.builder(langLabel(), b -> {
 			config.setLanguage(config.language().equals("fr") ? "en" : "fr");
 			b.setMessage(langLabel());
-		}).dimensions(x, y + 144, bw, bh).build());
+		}).dimensions(x, y += step, bw, bh).build());
 
-		addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> index.invalidate())
-				.dimensions(x, y + 168, bw, bh).build());
+		addDrawableChild(ButtonWidget.builder(Text.literal("§bManage mappings…"),
+				b -> { if (client != null) client.setScreen(new AliasListScreen(this, config)); })
+				.dimensions(x, y += step, bw, bh).build());
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> {
+			index.invalidate();
+			clearChildren();
+			init();
+		}).dimensions(x, y + step, bw, bh).build());
 	}
+
+	// --- left column: detected chambers (clickable) -------------------------
+
+	private void buildChamberButtons() {
+		List<StasisChamber> chambers = currentChambers();
+		if (chambers.isEmpty()) return;
+
+		int bw = 220;
+		int bh = 18;
+		int x = 20;
+		int y = 30;
+		int max = Math.min(chambers.size(), (height - 60) / (bh + 2));
+
+		for (int i = 0; i < max; i++) {
+			StasisChamber c = chambers.get(i);
+			boolean pearl = pearls.hasOwnPearl(client.world, c, chambers);
+			String label = (pearl ? "§a\u25CF " : "§c\u25CB ") + "§f" + c.label()
+					+ " §7" + c.trigger().toShortString();
+			List<String> keywords = new ArrayList<>(c.signTokens());
+			addDrawableChild(ButtonWidget.builder(Text.literal(label),
+					b -> { if (client != null) client.setScreen(new AliasEditScreen(this, config, "", keywords)); })
+					.dimensions(x, y, bw, bh).build());
+			y += bh + 2;
+		}
+	}
+
+	private List<StasisChamber> currentChambers() {
+		boolean inWorld = client != null && client.world != null && client.player != null;
+		return inWorld ? index.chambers(client.world, client.player.getBlockPos()) : List.of();
+	}
+
+	// --- toggle helpers -----------------------------------------------------
 
 	/**
 	 * Toggle between Baritone pathfinding and the built-in primitive walker. When
@@ -101,35 +149,24 @@ public final class StasisMonitorScreen extends Screen {
 	public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
 		super.render(ctx, mouseX, mouseY, delta);
 
-		ctx.drawCenteredTextWithShadow(textRenderer,
-				Text.literal("Detected stasis chambers").formatted(Formatting.AQUA), width / 2, 12, 0xFFFFFF);
+		ctx.drawTextWithShadow(textRenderer,
+				Text.literal("Detected chambers").formatted(Formatting.AQUA), 20, 16, 0xFFFFFF);
+		ctx.drawTextWithShadow(textRenderer,
+				Text.literal("Settings").formatted(Formatting.AQUA), width - 170, 16, 0xFFFFFF);
 
-		boolean inWorld = client != null && client.world != null && client.player != null;
-		List<StasisChamber> chambers = inWorld
-				? index.chambers(client.world, client.player.getBlockPos())
-				: List.of();
-
-		if (chambers.isEmpty()) {
-			ctx.drawCenteredTextWithShadow(textRenderer,
-					Text.literal("None nearby — park the bot next to your stasis signs."),
-					width / 2, 36, 0xAAAAAA);
+		if (currentChambers().isEmpty()) {
+			ctx.drawTextWithShadow(textRenderer,
+					Text.literal("§7None nearby — park the bot next to your stasis signs."),
+					20, 34, 0xAAAAAA);
 		} else {
-			int x = width / 2 - 170;
-			int y = 32;
-			for (StasisChamber c : chambers) {
-				boolean pearl = pearls.hasOwnPearl(client.world, c, chambers);
-				String row = (pearl ? "§a● " : "§c○ ") + "§f" + c.label()
-						+ "  §7" + c.trigger().toShortString()
-						+ (pearl ? "  §a[pearl]" : "  §c[no pearl]");
-				ctx.drawTextWithShadow(textRenderer, Text.literal(row), x, y, 0xFFFFFF);
-				y += 12;
-				if (y > height - 150) break;
-			}
+			ctx.drawTextWithShadow(textRenderer,
+					Text.literal("§8click a chamber to map it to a player"),
+					20, height - 14, 0x888888);
 		}
 
 		String master = config.master().isBlank() ? "(none)" : config.master();
-		ctx.drawCenteredTextWithShadow(textRenderer,
-				Text.literal("§7master: §f" + master + "  §7| DM in-game: §f" + config.commandPrefix() + " help"),
-				width / 2, height - 14, 0xFFFFFF);
+		ctx.drawTextWithShadow(textRenderer,
+				Text.literal("§7master: §f" + master + "  §7| DM: §f" + config.commandPrefix() + " help"),
+				width - 320, height - 14, 0xFFFFFF);
 	}
 }
