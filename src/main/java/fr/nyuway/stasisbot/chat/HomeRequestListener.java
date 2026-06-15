@@ -1,5 +1,6 @@
 package fr.nyuway.stasisbot.chat;
 
+import fr.nyuway.stasisbot.StasisBot;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.service.HomeService;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
@@ -32,8 +33,15 @@ public final class HomeRequestListener {
 
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			if (overlay) return;
-			ChatMessageParser.fromRaw(message.getString())
-					.ifPresent(p -> homeService.onChatMessage(p.sender(), p.body()));
+			String raw = message.getString();
+			var parsed = ChatMessageParser.fromRaw(raw);
+			if (parsed.isPresent()) {
+				homeService.onChatMessage(parsed.get().sender(), parsed.get().body());
+			} else if (config.debug() && config.matchesTrigger(raw)) {
+				// A line carries a trigger word but no sender could be extracted — log the
+				// raw shape so an unseen DM format can be added to ChatMessageParser.
+				StasisBot.LOGGER.info("[chat] trigger seen but unparsed: \"{}\"", raw);
+			}
 		});
 	}
 }
