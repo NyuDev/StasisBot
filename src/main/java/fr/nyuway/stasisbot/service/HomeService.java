@@ -174,6 +174,15 @@ public final class HomeService {
 			MeteorBridge.restoreAntiAfk();
 		}
 
+		// Home requests are priority 1: never make a waiting player sit through the
+		// bot's "dead time". If someone is queued while we're merely heading back home
+		// or restocking, drop that housekeeping and go serve them now. The home anchor
+		// is preserved, so the trip home simply resumes once the queue drains.
+		if (!requests.isEmpty() && (phase == Phase.RETURN || phase == Phase.RESTOCK)) {
+			preemptForRequest();
+			return;
+		}
+
 		switch (phase) {
 			case IDLE -> startNext();
 			case SAFETY -> driveSafety();
@@ -184,6 +193,20 @@ public final class HomeService {
 			case RETURN -> driveReturn();
 			case RESTOCK -> { if (!restock.tick()) finishCurrent(); }
 		}
+	}
+
+	/**
+	 * Interrupt the going-home / restocking housekeeping to serve a freshly queued
+	 * home request. Stops navigation, closes the restock chest if one is open, then
+	 * drops back to IDLE so {@link #startNext()} picks up the waiting player on the
+	 * next tick. The anchor is left untouched on purpose — the bot still owes a trip
+	 * home and must remember where that is.
+	 */
+	private void preemptForRequest() {
+		navigator.stop(client);
+		if (phase == Phase.RESTOCK) restock.abort();
+		StasisBot.LOGGER.info("[home] preempting {} to serve a waiting request", phase);
+		finishCurrent();
 	}
 
 	private void startNext() {

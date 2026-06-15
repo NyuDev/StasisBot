@@ -166,6 +166,25 @@ final class RestockController {
 		cursorSource = -1;
 	}
 
+	/**
+	 * Abandon an in-progress restock immediately — used when a home request
+	 * preempts the bot mid-refill (home is always priority 1). Any pearls held on
+	 * the cursor are put back where they came from and the chest screen is closed,
+	 * so the bot can walk off cleanly. The refill simply resumes next time the bot
+	 * gets home.
+	 */
+	void abort() {
+		ClientPlayerEntity self = client.player;
+		if (self != null && self.currentScreenHandler instanceof GenericContainerScreenHandler screen) {
+			ItemStack cursor = self.currentScreenHandler.getCursorStack();
+			if (!cursor.isEmpty() && cursorSource >= 0) {
+				client.interactionManager.clickSlot(screen.syncId, cursorSource, 0, SlotActionType.PICKUP, self);
+			}
+			self.closeHandledScreen();
+		}
+		reset();
+	}
+
 	/** Total ender pearls in the bot's inventory (main + hotbar). */
 	private int countPearls() {
 		ClientPlayerEntity self = client.player;
