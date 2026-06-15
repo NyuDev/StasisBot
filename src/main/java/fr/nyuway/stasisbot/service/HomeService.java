@@ -24,7 +24,6 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -130,7 +129,7 @@ public final class HomeService {
 	}
 
 	private boolean containsTrigger(String body) {
-		return body.toLowerCase(Locale.ROOT).contains(config.triggerWord().toLowerCase(Locale.ROOT));
+		return config.matchesTrigger(body);
 	}
 
 	/** Entry point from the chat listener (may be invoked off the client thread). */

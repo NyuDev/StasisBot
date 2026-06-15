@@ -33,7 +33,7 @@ public final class Messages {
 			Map.entry(Key.CFG_SET, "Set %s = %s"),
 			Map.entry(Key.CFG_UNKNOWN, "Unknown option: %s"),
 			Map.entry(Key.CFG_BADVALUE, "Bad value for %s"),
-			Map.entry(Key.CFG_HELP, "Options: lang, drop, reopen, return, walk, online, dm, trigger, whisper, master, returnpos, help"),
+			Map.entry(Key.CFG_HELP, "Options: lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), whisper, master, returnpos, help"),
 			Map.entry(Key.CFG_DENIED, "Only my master can configure me.")
 	);
 
@@ -53,7 +53,7 @@ public final class Messages {
 			Map.entry(Key.CFG_SET, "OK %s = %s"),
 			Map.entry(Key.CFG_UNKNOWN, "Option inconnue : %s"),
 			Map.entry(Key.CFG_BADVALUE, "Valeur invalide pour %s"),
-			Map.entry(Key.CFG_HELP, "Options : lang, drop, reopen, return, walk, online, dm, trigger, whisper, master, returnpos, help"),
+			Map.entry(Key.CFG_HELP, "Options : lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), whisper, master, returnpos, help"),
 			Map.entry(Key.CFG_DENIED, "Seul mon maitre peut me configurer.")
 	);
 

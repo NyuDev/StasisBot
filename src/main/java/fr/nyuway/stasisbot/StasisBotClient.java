@@ -46,6 +46,6 @@ public final class StasisBotClient implements ClientModInitializer {
 			}
 		});
 
-		StasisBot.LOGGER.info("StasisBot ready — listening for '{}' in chat", config.triggerWord());
+		StasisBot.LOGGER.info("StasisBot ready — listening for [{}] in chat", config.triggerWordsDisplay());
 	}
 }

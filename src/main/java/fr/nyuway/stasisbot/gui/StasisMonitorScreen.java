@@ -64,6 +64,10 @@ public final class StasisMonitorScreen extends Screen {
 				b -> { if (client != null) client.setScreen(new AliasListScreen(this, config)); })
 				.dimensions(x, y += step, bw, bh).build());
 
+		addDrawableChild(ButtonWidget.builder(Text.literal("§bTrigger words…"),
+				b -> { if (client != null) client.setScreen(new TriggerWordsScreen(this, config)); })
+				.dimensions(x, y += step, bw, bh).build());
+
 		addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> {
 			index.invalidate();
 			clearChildren();

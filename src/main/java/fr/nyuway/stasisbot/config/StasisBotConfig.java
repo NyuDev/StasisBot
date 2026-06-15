@@ -8,9 +8,12 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * User configuration, persisted as JSON in {@code config/stasisbot.json}.
@@ -23,8 +26,21 @@ public final class StasisBotConfig {
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-	/** Word the bot reacts to in chat (substring match, case-insensitive). */
-	private String triggerWord = "!home";
+	/**
+	 * Legacy single trigger word, kept only so old config files still load; it is
+	 * migrated into {@link #triggerWords} on first load and then dropped.
+	 */
+	private String triggerWord;
+
+	/**
+	 * Words/phrases the bot reacts to in chat (case-insensitive substring match).
+	 * A chat line triggers a home request if it contains <em>any</em> of these.
+	 * Having several lets the master vary the wording to dodge server anti-spam
+	 * (e.g. {@code "!home", "!tp", "home pls"}). Left null until
+	 * {@link #sanitise()} fills it (from the legacy field or the default) so an
+	 * old config carrying only {@code triggerWord} migrates cleanly.
+	 */
+	private List<String> triggerWords;
 
 	/** Radius, in chunks, around the bot to look at for chambers. */
 	private int scanChunkRadius = 2;
@@ -93,7 +109,26 @@ public final class StasisBotConfig {
 
 	// --- accessors -----------------------------------------------------------
 
-	public String triggerWord() { return triggerWord; }
+	/** Effective trigger words (never empty; defaults to {@code ["!home"]}). */
+	public List<String> triggerWords() {
+		return (triggerWords == null || triggerWords.isEmpty()) ? List.of("!home") : List.copyOf(triggerWords);
+	}
+
+	/** Human-readable, comma-separated list for logs/GUI/command echoes. */
+	public String triggerWordsDisplay() {
+		return String.join(", ", triggerWords());
+	}
+
+	/** True if {@code body} contains any configured trigger word (case-insensitive). */
+	public boolean matchesTrigger(String body) {
+		if (body == null) return false;
+		String b = body.toLowerCase(Locale.ROOT);
+		for (String w : triggerWords()) {
+			if (!w.isBlank() && b.contains(w)) return true;
+		}
+		return false;
+	}
+
 	public int scanChunkRadius() { return scanChunkRadius; }
 	public int maxChamberDistance() { return maxChamberDistance; }
 	public int triggerSearchRadius() { return triggerSearchRadius; }
@@ -137,8 +172,33 @@ public final class StasisBotConfig {
 	public void setAutoWalk(boolean v) { this.autoWalk = v; save(); }
 	public void setRequireOnline(boolean v) { this.requireOnline = v; save(); }
 	public void setDmFeedback(boolean v) { this.dmFeedback = v; save(); }
-	public void setTriggerWord(String v) { if (v != null && !v.isBlank()) { this.triggerWord = v.trim(); save(); } }
 	public void setWhisperCommand(String v) { if (v != null && !v.isBlank()) { this.whisperCommand = v.trim(); save(); } }
+
+	/** Replace the whole trigger-word list (cleaned; falls back to "!home" if empty). */
+	public void setTriggerWords(List<String> words) {
+		this.triggerWords = cleanWords(words);
+		if (this.triggerWords.isEmpty()) this.triggerWords.add("!home");
+		save();
+	}
+
+	/** Add one trigger word if not already present. */
+	public void addTriggerWord(String word) {
+		if (word == null || word.isBlank()) return;
+		if (triggerWords == null) triggerWords = new ArrayList<>();
+		String s = word.trim().toLowerCase(Locale.ROOT);
+		if (!triggerWords.contains(s)) { triggerWords.add(s); save(); }
+	}
+
+	/** Remove a trigger word; keeps at least "!home" so the bot is never deaf. */
+	public boolean removeTriggerWord(String word) {
+		if (word == null || triggerWords == null) return false;
+		boolean removed = triggerWords.removeIf(s -> s.equalsIgnoreCase(word.trim()));
+		if (removed) {
+			if (triggerWords.isEmpty()) triggerWords.add("!home");
+			save();
+		}
+		return removed;
+	}
 	public void setMaster(String v) { this.master = v == null ? "" : v.trim(); save(); }
 	public void setDebug(boolean v) { this.debug = v; save(); }
 	public void setUseBaritone(boolean v) { this.useBaritone = v; save(); }
@@ -181,6 +241,16 @@ public final class StasisBotConfig {
 		if (aliases.remove(player.trim().toLowerCase()) != null) save();
 	}
 
+	/** Lower-case, trim, drop blanks and de-duplicate a list of trigger words. */
+	private static List<String> cleanWords(List<String> words) {
+		if (words == null) return new ArrayList<>();
+		return words.stream()
+				.map(s -> s == null ? "" : s.trim().toLowerCase(Locale.ROOT))
+				.filter(s -> !s.isBlank())
+				.distinct()
+				.collect(Collectors.toCollection(ArrayList::new));
+	}
+
 	// --- persistence ---------------------------------------------------------
 
 	public static StasisBotConfig load() {
@@ -216,7 +286,14 @@ public final class StasisBotConfig {
 	}
 
 	private void sanitise() {
-		if (triggerWord == null || triggerWord.isBlank()) triggerWord = "!home";
+		// Migrate the legacy single trigger word into the multi-word list, then drop it.
+		if (triggerWords == null) triggerWords = new ArrayList<>();
+		if (triggerWords.isEmpty() && triggerWord != null && !triggerWord.isBlank()) {
+			triggerWords.add(triggerWord);
+		}
+		triggerWord = null; // legacy field consumed — never re-serialised
+		triggerWords = cleanWords(triggerWords);
+		if (triggerWords.isEmpty()) triggerWords.add("!home");
 		if (aliases == null) aliases = new LinkedHashMap<>();
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
 		if (maxChamberDistance < 1) maxChamberDistance = 24;
@@ -238,6 +315,7 @@ public final class StasisBotConfig {
 
 	private static StasisBotConfig withExample() {
 		StasisBotConfig cfg = new StasisBotConfig();
+		cfg.triggerWords = new ArrayList<>(List.of("!home"));
 		// Seed one illustrative alias so the file documents its own format.
 		// (Real player aliases belong in your local config/stasisbot.json, not in source.)
 		cfg.aliases.put("steve", List.of("tower"));

@@ -2,6 +2,7 @@ package fr.nyuway.stasisbot.config;
 
 import fr.nyuway.stasisbot.i18n.Messages;
 
+import java.util.Arrays;
 import java.util.Locale;
 
 /**
@@ -53,11 +54,44 @@ public final class MasterCommands {
 			case "walk" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAutoWalk(v); return set("walk", on(v)); }
 			case "online" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setRequireOnline(v); return set("online", on(v)); }
 			case "dm" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDmFeedback(v); return set("dm", on(v)); }
-			case "trigger" -> { if (value == null) return bad(key); config.setTriggerWord(value); return set("trigger", config.triggerWord()); }
+			case "trigger" -> { return trigger(config, parts); }
 			case "whisper" -> { if (value == null) return bad(key); config.setWhisperCommand(value); return set("whisper", config.whisperCommand()); }
 			case "master" -> { if (value == null) return bad(key); config.setMaster(value); return set("master", config.master()); }
 			case "returnpos" -> { return returnPos(config, parts); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
+		}
+	}
+
+	private static Result trigger(StasisBotConfig config, String[] parts) {
+		// "!sb trigger"                       → show the current list
+		// "!sb trigger list"                  → show the current list
+		// "!sb trigger add <w> [w2 ...]"      → add word(s)
+		// "!sb trigger remove|del|rm <w> ..." → remove word(s)
+		// "!sb trigger set <w> [w2 ...]"      → replace the whole list
+		// "!sb trigger <w> [w2 ...]"          → (bare) replace the whole list
+		if (parts.length < 3) return set("trigger", config.triggerWordsDisplay());
+		String sub = parts[2].toLowerCase(Locale.ROOT);
+		switch (sub) {
+			case "list" -> { return set("trigger", config.triggerWordsDisplay()); }
+			case "add" -> {
+				if (parts.length < 4) return bad("trigger");
+				for (int i = 3; i < parts.length; i++) config.addTriggerWord(parts[i]);
+				return set("trigger", config.triggerWordsDisplay());
+			}
+			case "remove", "del", "rm" -> {
+				if (parts.length < 4) return bad("trigger");
+				for (int i = 3; i < parts.length; i++) config.removeTriggerWord(parts[i]);
+				return set("trigger", config.triggerWordsDisplay());
+			}
+			case "set" -> {
+				if (parts.length < 4) return bad("trigger");
+				config.setTriggerWords(Arrays.asList(parts).subList(3, parts.length));
+				return set("trigger", config.triggerWordsDisplay());
+			}
+			default -> {
+				config.setTriggerWords(Arrays.asList(parts).subList(2, parts.length));
+				return set("trigger", config.triggerWordsDisplay());
+			}
 		}
 	}
 
