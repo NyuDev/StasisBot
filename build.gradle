@@ -1,0 +1,72 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	// Meteor's maven hosts a maintained Baritone fork (pathfinding) for current MC.
+	maven { url "https://maven.meteordev.org/snapshots" }
+	maven { url "https://maven.meteordev.org/releases" }
+	// babbaj hosts nether-pathfinder, a native lib Baritone loads at startup.
+	maven { url "https://babbaj.github.io/maven/" }
+}
+
+loom {
+	runs {
+		client {
+			programArgs "--username", "Shasync"
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	// Baritone pathfinding (Meteor fork). Loaded as a mod in dev so BaritoneAPI is live.
+	modImplementation "meteordevelopment:baritone:${project.minecraft_version}-SNAPSHOT"
+	// Native pathfinder Baritone constructs at startup (else NoClassDefFoundError).
+	runtimeOnly "dev.babbaj:nether-pathfinder:1.6"
+
+	// Meteor Client — dev-only, so we can test the anti-AFK bridge live. Runtime-only
+	// (our code only touches Meteor via reflection) and never shipped in the built mod.
+	modRuntimeOnly "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
+}
+
+processResources {
+	inputs.property "version", project.version
+	filteringCharset "UTF-8"
+
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+def targetJavaVersion = 21
+tasks.withType(JavaCompile).configureEach {
+	it.options.encoding = "UTF-8"
+	if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+		it.options.release.set(targetJavaVersion)
+	}
+}
+
+java {
+	def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+	if (JavaVersion.current() < javaVersion) {
+		toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+	}
+	// Generate a sources jar so VS Code can navigate into Minecraft/Fabric code.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
