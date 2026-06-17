@@ -70,6 +70,15 @@ set_opt biomeBlendRadius 0
 set_opt particles 2
 echo "[stasisbot] render tuning: maxFps=${SB_MAX_FPS:-10} renderDistance=${SB_RENDER_DISTANCE:-6}"
 
+# A previous run that was hard-killed (SIGKILL on `docker stop` timeout, OOM,
+# or a crash) can't run its cleanup trap, so it leaves a stale X lock behind.
+# The container filesystem survives a plain `docker restart`/`compose start`, so
+# that lock is still there next boot, Xvfb refuses to start ("Server is already
+# active for display"), and Minecraft then dies with the misleading GLFW error
+# "Failed to detect any supported platform". Clear it before (re)starting Xvfb.
+DISPLAY_NUM="${DISPLAY#:}"
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
+
 echo "[stasisbot] starting Xvfb on ${DISPLAY} ..."
 Xvfb "${DISPLAY}" -screen 0 1280x720x24 -ac +extension GLX +render -noreset \
 	>/tmp/xvfb.log 2>&1 &
@@ -81,13 +90,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Wait for the virtual display to be ready before launching the game.
+# Wait for the virtual display to actually answer before launching the game.
+display_ready=false
 for _ in $(seq 1 50); do
 	if xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
+		display_ready=true
+		break
+	fi
+	# If Xvfb died (e.g. lock race), don't spin pointlessly.
+	if ! kill -0 "${XVFB_PID}" 2>/dev/null; then
 		break
 	fi
 	sleep 0.2
 done
+
+# Launching Minecraft without a live display only yields the cryptic GLFW crash
+# and a restart loop. Fail fast with the Xvfb log instead so a restart retries
+# cleanly (the stale lock is now gone).
+if [ "${display_ready}" != "true" ]; then
+	echo "[stasisbot] ERROR: Xvfb did not come up on ${DISPLAY}. Xvfb log:" >&2
+	cat /tmp/xvfb.log >&2 || true
+	exit 1
+fi
 
 echo "[stasisbot] launching headless client -> server: ${STASIS_SERVER}"
 echo "[stasisbot] first run only: DevAuth logs an 'OAuth URL' below."
