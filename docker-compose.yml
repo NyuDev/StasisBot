@@ -25,6 +25,10 @@ services:
     environment:
       # Server the bot auto-joins on launch. Override in a .env file or here.
       STASIS_SERVER: "${STASIS_SERVER:-2b2t.org}"
+      # Client render distance (entrypoint writes it into options.txt). Kept high
+      # because the bot's surveillance (player/chamber/entity watchers) only sees
+      # chunks the client loads. Capped in practice by 2b2t's server view-distance.
+      SB_RENDER_DISTANCE: "${SB_RENDER_DISTANCE:-32}"
     volumes:
       # Minecraft / mappings / library caches — keeps restarts fast.
       - gradle-cache:/root/.gradle
