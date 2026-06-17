@@ -54,6 +54,7 @@ public final class MasterCommands {
 			case "walk" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAutoWalk(v); return set("walk", on(v)); }
 			case "online" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setRequireOnline(v); return set("online", on(v)); }
 			case "dm" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDmFeedback(v); return set("dm", on(v)); }
+			case "members" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setBaseMembersControl(v); return set("members", on(v)); }
 			case "trigger" -> { return trigger(config, parts); }
 			case "whisper" -> { if (value == null) return bad(key); config.setWhisperCommand(value); return set("whisper", config.whisperCommand()); }
 			case "master" -> { if (value == null) return bad(key); config.setMaster(value); return set("master", config.master()); }

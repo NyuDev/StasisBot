@@ -3,7 +3,9 @@ package fr.nyuway.stasisbot.entity;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.model.StasisChamber;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
@@ -42,6 +44,31 @@ public final class PearlDetector {
 			if (ownsPearl(chamber, allChambers, pearlPos)) return true;
 		}
 		return false;
+	}
+
+	/**
+	 * The name of the player who owns the pearl currently suspended in {@code chamber}
+	 * (i.e. the one who threw it), or {@code null} when there is no pearl here or its
+	 * owner can't be resolved (thrower not loaded). Used to spot a pearl placed in the
+	 * wrong chamber by comparing this name against the chamber's sign.
+	 */
+	public String ownPearlThrower(ClientWorld world, StasisChamber chamber, List<StasisChamber> allChambers) {
+		double r = config.pearlSearchRadius();
+		Vec3d centre = Vec3d.ofCenter(chamber.trigger());
+		Box box = Box.of(centre, r * 2, r * 2, r * 2);
+		double rSq = r * r;
+		var pearls = world.getEntitiesByType(EntityType.ENDER_PEARL, box,
+				pearl -> pearl.squaredDistanceTo(centre) <= rSq);
+		for (var pearl : pearls) {
+			Vec3d pearlPos = new Vec3d(pearl.getX(), pearl.getY(), pearl.getZ());
+			if (!ownsPearl(chamber, allChambers, pearlPos)) continue;
+			Entity owner = pearl.getOwner();
+			if (owner instanceof PlayerEntity p) {
+				return p.getGameProfile().name();
+			}
+			return null; // pearl is here but we can't tell whose it is
+		}
+		return null;
 	}
 
 	/** A pearl belongs to whichever chamber's trigger is physically closest to it. */

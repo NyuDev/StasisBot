@@ -35,4 +35,28 @@ public final class TrapState {
 		}
 		return null;
 	}
+
+	/**
+	 * Generalised "is this trigger currently released/active?" reader that works for
+	 * every trigger kind, not just trapdoors: trapdoors and doors expose an
+	 * {@code open} property, while levers and buttons expose {@code powered}.
+	 *
+	 * @return {@code TRUE} when open/powered, {@code FALSE} when closed/unpowered,
+	 *         or {@code null} when the block has neither property (state unreadable).
+	 */
+	public static Boolean isTriggerActive(ClientWorld world, BlockPos pos) {
+		if (world == null) return null;
+		var state = world.getBlockState(pos);
+		try {
+			Boolean powered = null;
+			for (var entry : state.getEntries().entrySet()) {
+				String name = entry.getKey().getName();
+				if (name.equals("open")) return Boolean.TRUE.equals(entry.getValue());
+				if (name.equals("powered")) powered = Boolean.TRUE.equals(entry.getValue());
+			}
+			return powered; // null when the trigger exposes neither "open" nor "powered"
+		} catch (Throwable ignored) {
+			return null;
+		}
+	}
 }

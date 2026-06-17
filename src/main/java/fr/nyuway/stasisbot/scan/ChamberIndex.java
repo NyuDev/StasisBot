@@ -4,9 +4,11 @@ import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.model.StasisChamber;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.chunk.ChunkStatus;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,7 +54,7 @@ public final class ChamberIndex {
 		if (expired || chunkKey != lastChunkKey) {
 			List<StasisChamber> fresh = scanner.scan(world, origin);
 			remember(fresh, now);
-			cached = mergeWithMemory(fresh, now);
+			cached = mergeWithMemory(world, origin, fresh, now);
 			lastScanAt = now;
 			lastChunkKey = chunkKey;
 		}
@@ -68,7 +70,7 @@ public final class ChamberIndex {
 		long now = System.currentTimeMillis();
 		List<StasisChamber> fresh = scanner.scan(world, origin);
 		remember(fresh, now);
-		cached = mergeWithMemory(fresh, now);
+		cached = mergeWithMemory(world, origin, fresh, now);
 		lastScanAt = now;
 		lastChunkKey = chunkKey(origin);
 		for (StasisChamber c : fresh) {
@@ -90,9 +92,20 @@ public final class ChamberIndex {
 		}
 	}
 
-	private List<StasisChamber> mergeWithMemory(List<StasisChamber> fresh, long now) {
+	private List<StasisChamber> mergeWithMemory(ClientWorld world, BlockPos origin, List<StasisChamber> fresh, long now) {
 		long ttl = config.rememberMillis();
-		remembered.entrySet().removeIf(e -> now - e.getValue().seenAt() > ttl);
+		Set<BlockPos> freshTriggers = new HashSet<>();
+		for (StasisChamber c : fresh) freshTriggers.add(c.trigger());
+		// Expire by age, but ALSO forget at once any remembered chamber that is currently
+		// scannable (its sign chunk is loaded and within range) yet absent from this fresh
+		// scan: that means its sign or trigger was just removed, so it's no longer a stasis
+		// and must drop out of the list immediately instead of lingering for the TTL.
+		remembered.entrySet().removeIf(e -> {
+			if (now - e.getValue().seenAt() > ttl) return true;
+			StasisChamber c = e.getValue().chamber();
+			if (freshTriggers.contains(c.trigger())) return false; // re-seen, keep
+			return isScannable(world, origin, c.sign()); // gone while in view → drop now
+		});
 		Map<BlockPos, StasisChamber> union = new HashMap<>();
 		for (Remembered r : remembered.values()) {
 			union.put(r.chamber().trigger(), r.chamber());
@@ -101,6 +114,24 @@ public final class ChamberIndex {
 			union.put(c.trigger(), c);
 		}
 		return new ArrayList<>(union.values());
+	}
+
+	/**
+	 * Whether {@code sign} sits inside the region a scan actually covers right now:
+	 * its chunk is within {@link StasisBotConfig#scanChunkRadius()} of the origin, the
+	 * chunk is loaded, and it's within {@link StasisBotConfig#maxChamberDistance()}.
+	 * When true but the chamber is missing from a fresh scan, the sign/trap is really
+	 * gone (not merely out of range), so the memory can forget it on the spot.
+	 */
+	private boolean isScannable(ClientWorld world, BlockPos origin, BlockPos sign) {
+		if (world == null) return false;
+		int r = config.scanChunkRadius();
+		int ocx = origin.getX() >> 4, ocz = origin.getZ() >> 4;
+		int scx = sign.getX() >> 4, scz = sign.getZ() >> 4;
+		if (Math.abs(scx - ocx) > r || Math.abs(scz - ocz) > r) return false;
+		long maxSq = (long) config.maxChamberDistance() * config.maxChamberDistance();
+		if (sign.getSquaredDistance(origin) > maxSq) return false;
+		return world.getChunkManager().getChunk(scx, scz, ChunkStatus.FULL, false) != null;
 	}
 
 	private static long chunkKey(BlockPos pos) {

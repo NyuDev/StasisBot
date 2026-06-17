@@ -14,6 +14,9 @@ public final class Messages {
 		QUEUED, ON_MY_WAY, RELEASING, EMPTY, TOO_FAR, PATH_FAIL, PEARL_GONE,
 		DONE, NOT_CONFIRMED, RETRYING,
 		TP_FAILED_LAG, TP_FAILED_OFFLINE,
+		REARM_OK, REARM_NOPEARL,
+		WRONG_PEARL,
+		NAV_BUSY, NAV_COMING, NAV_GOTO, NAV_STOPPED, NAV_NOPLAYER,
 		CFG_SET, CFG_UNKNOWN, CFG_BADVALUE, CFG_HELP, CFG_DENIED
 	}
 
@@ -30,10 +33,18 @@ public final class Messages {
 			Map.entry(Key.RETRYING, "TP not confirmed — trying another stasis."),
 			Map.entry(Key.TP_FAILED_LAG, "TP cancelled — server was lagging. Try again when stable."),
 			Map.entry(Key.TP_FAILED_OFFLINE, "TP skipped — you were offline or left mid-walk."),
+			Map.entry(Key.REARM_OK, "Re-arm your stasis with the pearl I dropped, or you can't get back."),
+			Map.entry(Key.REARM_NOPEARL, "⚠ I'm OUT of pearls — re-arm your stasis yourself NOW or you won't return!"),
+			Map.entry(Key.WRONG_PEARL, "⚠ Wrong stasis — your pearl isn't in your chamber (%s). Move it to yours."),
+			Map.entry(Key.NAV_BUSY, "Busy right now — try again in a moment."),
+			Map.entry(Key.NAV_COMING, "On my way to you."),
+			Map.entry(Key.NAV_GOTO, "Heading to %s."),
+			Map.entry(Key.NAV_STOPPED, "Stopped."),
+			Map.entry(Key.NAV_NOPLAYER, "Can't see you nearby — come closer or give coords."),
 			Map.entry(Key.CFG_SET, "Set %s = %s"),
 			Map.entry(Key.CFG_UNKNOWN, "Unknown option: %s"),
 			Map.entry(Key.CFG_BADVALUE, "Bad value for %s"),
-			Map.entry(Key.CFG_HELP, "Options: lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), whisper, master, returnpos, help"),
+			Map.entry(Key.CFG_HELP, "Options: lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), members, whisper, master, sethome, come, goto, stop, returnpos, help"),
 			Map.entry(Key.CFG_DENIED, "Only my master can configure me.")
 	);
 
@@ -50,10 +61,18 @@ public final class Messages {
 			Map.entry(Key.RETRYING, "TP non confirmee — j'essaie une autre stasis."),
 			Map.entry(Key.TP_FAILED_LAG, "TP annulee — le serveur lag. Reessaie quand c'est stable."),
 			Map.entry(Key.TP_FAILED_OFFLINE, "TP annulee — tu etais hors ligne ou tu es parti en route."),
+			Map.entry(Key.REARM_OK, "Re-arme ta stasis avec la perle que j'ai lachee, sinon tu ne pourras pas revenir."),
+			Map.entry(Key.REARM_NOPEARL, "⚠ Je n'ai PLUS de perles — re-arme ta stasis toi-meme MAINTENANT ou tu ne reviendras pas !"),
+			Map.entry(Key.WRONG_PEARL, "⚠ Mauvaise stasis — ta perle n'est pas dans ta chambre (%s). Mets-la dans la tienne."),
+			Map.entry(Key.NAV_BUSY, "Je suis occupe — reessaie dans un instant."),
+			Map.entry(Key.NAV_COMING, "J'arrive vers toi."),
+			Map.entry(Key.NAV_GOTO, "Je vais en %s."),
+			Map.entry(Key.NAV_STOPPED, "Arrete."),
+			Map.entry(Key.NAV_NOPLAYER, "Je ne te vois pas pres de moi — approche ou donne des coords."),
 			Map.entry(Key.CFG_SET, "OK %s = %s"),
 			Map.entry(Key.CFG_UNKNOWN, "Option inconnue : %s"),
 			Map.entry(Key.CFG_BADVALUE, "Valeur invalide pour %s"),
-			Map.entry(Key.CFG_HELP, "Options : lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), whisper, master, returnpos, help"),
+			Map.entry(Key.CFG_HELP, "Options : lang, drop, reopen, return, walk, online, dm, trigger (add/remove/list), members, whisper, master, sethome, come, goto, stop, returnpos, help"),
 			Map.entry(Key.CFG_DENIED, "Seul mon maitre peut me configurer.")
 	);
 

@@ -47,6 +47,14 @@ final class RestockController {
 	private long lastActionAt;
 	private int cursorSource = -1;
 
+	// Stats for the post-restock summary (captured before the chest screen closes,
+	// preserved across reset() so the caller can read them once tick() finishes).
+	private int startHeld;
+	private int resultTaken;
+	private int resultHeld;
+	private int resultChestRemaining;
+	private boolean resultDidRestock;
+
 	RestockController(MinecraftClient client, StasisBotConfig config, PlayerFeedback feedback) {
 		this.client = client;
 		this.config = config;
@@ -74,6 +82,11 @@ final class RestockController {
 		interacted = false;
 		lastActionAt = 0L;
 		cursorSource = -1;
+		startHeld = countPearls();
+		resultTaken = 0;
+		resultHeld = startHeld;
+		resultChestRemaining = 0;
+		resultDidRestock = false;
 		return true;
 	}
 
@@ -99,6 +112,7 @@ final class RestockController {
 					return true;
 				}
 				feedback.debug("Restock done — now holding " + countPearls() + " pearls");
+				recordResult(screen, chestSlots);
 				self.closeHandledScreen();
 				reset();
 				return false;
@@ -109,6 +123,7 @@ final class RestockController {
 				int src = findChestPearlSlot(screen, chestSlots);
 				if (src < 0) {
 					feedback.debug("Chest has no more pearls — stopping at " + countPearls());
+					recordResult(screen, chestSlots);
 					self.closeHandledScreen();
 					reset();
 					return false;
@@ -124,6 +139,7 @@ final class RestockController {
 						client.interactionManager.clickSlot(screen.syncId, cursorSource, 0, SlotActionType.PICKUP, self);
 					}
 					feedback.debug("Inventory full during restock — stopping at " + countPearls());
+					recordResult(screen, chestSlots);
 					self.closeHandledScreen();
 					reset();
 					return false;
@@ -185,6 +201,26 @@ final class RestockController {
 		reset();
 	}
 
+	/** Capture the restock outcome while the chest screen is still open. */
+	private void recordResult(GenericContainerScreenHandler screen, int chestSlots) {
+		resultHeld = countPearls();
+		resultTaken = Math.max(0, resultHeld - startHeld);
+		resultChestRemaining = countChestPearls(screen, chestSlots);
+		resultDidRestock = resultTaken > 0;
+	}
+
+	/** Pearls the bot pulled in the last restock. */
+	int taken() { return resultTaken; }
+
+	/** Pearls the bot holds after the last restock. */
+	int held() { return resultHeld; }
+
+	/** Pearls left in the chest after the last restock. */
+	int chestRemaining() { return resultChestRemaining; }
+
+	/** Whether the last restock actually moved any pearls. */
+	boolean didRestock() { return resultDidRestock; }
+
 	/** Total ender pearls in the bot's inventory (main + hotbar). */
 	private int countPearls() {
 		ClientPlayerEntity self = client.player;
@@ -203,6 +239,16 @@ final class RestockController {
 			if (screen.getSlot(i).getStack().isOf(Items.ENDER_PEARL)) return i;
 		}
 		return -1;
+	}
+
+	/** Total ender pearls remaining in the chest section of the open screen. */
+	private int countChestPearls(GenericContainerScreenHandler screen, int chestSlots) {
+		int total = 0;
+		for (int i = 0; i < chestSlots; i++) {
+			ItemStack st = screen.getSlot(i).getStack();
+			if (st.isOf(Items.ENDER_PEARL)) total += st.getCount();
+		}
+		return total;
 	}
 
 	/** A bot-inventory slot (after the chest section) that can accept a pearl, or -1. */

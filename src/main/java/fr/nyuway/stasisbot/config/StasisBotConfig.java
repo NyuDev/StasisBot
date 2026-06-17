@@ -27,18 +27,28 @@ public final class StasisBotConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
 	/**
+	 * Default trigger words for a fresh config. Several presets are seeded so the
+	 * master can vary the wording out of the box to dodge server anti-spam: a chat
+	 * line fires a request when it <em>starts</em> with any of these.
+	 */
+	private static final List<String> DEFAULT_TRIGGERS = List.of("!home", "pearl", "warp");
+
+	/**
 	 * Legacy single trigger word, kept only so old config files still load; it is
 	 * migrated into {@link #triggerWords} on first load and then dropped.
 	 */
 	private String triggerWord;
 
 	/**
-	 * Words/phrases the bot reacts to in chat (case-insensitive substring match).
-	 * A chat line triggers a home request if it contains <em>any</em> of these.
-	 * Having several lets the master vary the wording to dodge server anti-spam
-	 * (e.g. {@code "!home", "!tp", "home pls"}). Left null until
-	 * {@link #sanitise()} fills it (from the legacy field or the default) so an
-	 * old config carrying only {@code triggerWord} migrates cleanly.
+	 * Words/phrases the bot reacts to in chat. A chat line triggers a home request
+	 * when it <em>starts</em> with any of these (case-insensitive), optionally
+	 * followed by a space and arbitrary text — that trailing "gibberish" lets a
+	 * player slip past a server's repeat-message anti-spam (e.g. {@code "!home xj3"}).
+	 * The keyword must come <em>first</em>, so ordinary chat mentioning the word
+	 * mid-sentence never fires. Having several keywords lets the master vary the
+	 * wording too. Left null until {@link #sanitise()} fills it (from the legacy
+	 * field or the presets) so an old config carrying only {@code triggerWord}
+	 * migrates cleanly.
 	 */
 	private List<String> triggerWords;
 
@@ -92,6 +102,12 @@ public final class StasisBotConfig {
 	private long arrivalTimeoutMillis = 5000L;
 	/** Player name allowed to configure the bot by chat/DM (empty = nobody). */
 	private String master = "";
+	/**
+	 * When true, any base member — a player whose name/alias appears on a detected
+	 * stasis sign — may run config commands too, not just the master. Lets a whole
+	 * trusted base drive the bot without sharing one master account.
+	 */
+	private boolean baseMembersControl = false;
 	/** Prefix for master config commands (e.g. "!sb drop off"). */
 	private String commandPrefix = "!sb";
 	/** Verbose logging + in-game debug messages. */
@@ -100,6 +116,35 @@ public final class StasisBotConfig {
 	private boolean useBaritone = true;
 	/** Forget a chamber that hasn't been re-seen for this long (ms). */
 	private long rememberMillis = 60000L;
+	/** After dying, automatically respawn and walk back to the fixed home position. */
+	private boolean returnHomeOnDeath = true;
+
+	// --- Discord webhook (opt-in, off by default) ---------------------------
+	/** Master switch for Discord webhook notifications. */
+	private boolean discordEnabled = false;
+	/** Discord webhook URL; only used when {@link #discordEnabled} and it's a real webhook host. */
+	private String discordWebhookUrl = "";
+	/** Whether the GUI "Test" button pings @everyone (per-event pings are configured separately). */
+	private boolean discordTestPing = true;
+	/** Send messages as a rich embed (named, coloured card) instead of plain text. */
+	private boolean discordUseEmbeds = false;
+	/**
+	 * What a ping mentions when one fires (the per-event {@link PingMode} decides
+	 * <em>whether</em> to ping): {@code @everyone}, {@code @here}, or a custom role.
+	 */
+	private PingTarget pingTarget = PingTarget.EVERYONE;
+	/**
+	 * The custom role to mention when {@link #pingTarget} is {@link PingTarget#ROLE}:
+	 * either its numeric ID (a real ping) or its name (shown as text — a webhook can't
+	 * resolve a name to an ID). Defaults to {@code "2b2t"}.
+	 */
+	private String pingRole = "2b2t";
+	/**
+	 * Per-event settings, keyed by {@link DiscordEvent#key()}: whether to send it, its
+	 * {@code @everyone} {@link PingMode}, and the optional gear / coordinates / distance
+	 * extras. Missing entries fall back to each event's defaults.
+	 */
+	private Map<String, DiscordEventSetting> discordEvents = new LinkedHashMap<>();
 
 	/**
 	 * Lower-cased player name → keywords that may appear on that player's sign
@@ -109,9 +154,9 @@ public final class StasisBotConfig {
 
 	// --- accessors -----------------------------------------------------------
 
-	/** Effective trigger words (never empty; defaults to {@code ["!home"]}). */
+	/** Effective trigger words (never empty; defaults to the presets). */
 	public List<String> triggerWords() {
-		return (triggerWords == null || triggerWords.isEmpty()) ? List.of("!home") : List.copyOf(triggerWords);
+		return (triggerWords == null || triggerWords.isEmpty()) ? List.copyOf(DEFAULT_TRIGGERS) : List.copyOf(triggerWords);
 	}
 
 	/** Human-readable, comma-separated list for logs/GUI/command echoes. */
@@ -119,12 +164,22 @@ public final class StasisBotConfig {
 		return String.join(", ", triggerWords());
 	}
 
-	/** True if {@code body} contains any configured trigger word (case-insensitive). */
+	/**
+	 * True when {@code body} <em>begins</em> with a configured trigger word
+	 * (case-insensitive), either standing alone or directly followed by a space.
+	 * Anything after that space is ignored, so a player can append random text to
+	 * beat a server's "same message twice" anti-spam while the bot still reacts.
+	 * The keyword must be first, so it won't fire on normal chat that merely
+	 * mentions the word later in a sentence.
+	 */
 	public boolean matchesTrigger(String body) {
 		if (body == null) return false;
-		String b = body.toLowerCase(Locale.ROOT);
+		String b = body.trim().toLowerCase(Locale.ROOT);
 		for (String w : triggerWords()) {
-			if (!w.isBlank() && b.contains(w)) return true;
+			if (w.isBlank()) continue;
+			String word = w.toLowerCase(Locale.ROOT);
+			if (b.equals(word)) return true;
+			if (b.startsWith(word) && Character.isWhitespace(b.charAt(word.length()))) return true;
 		}
 		return false;
 	}
@@ -158,10 +213,29 @@ public final class StasisBotConfig {
 		return name != null && master != null && !master.isBlank()
 				&& master.equalsIgnoreCase(name.trim());
 	}
+	public boolean baseMembersControl() { return baseMembersControl; }
 	public String commandPrefix() { return commandPrefix; }
 	public boolean debug() { return debug; }
 	public boolean useBaritone() { return useBaritone; }
 	public long rememberMillis() { return rememberMillis; }
+	public boolean returnHomeOnDeath() { return returnHomeOnDeath; }
+	public boolean discordEnabled() { return discordEnabled; }
+	public String discordWebhookUrl() { return discordWebhookUrl == null ? "" : discordWebhookUrl; }
+	public boolean discordTestPing() { return discordTestPing; }
+	public boolean discordUseEmbeds() { return discordUseEmbeds; }
+	public PingTarget pingTarget() { return pingTarget == null ? PingTarget.EVERYONE : pingTarget; }
+	public String pingRole() { return (pingRole == null || pingRole.isBlank()) ? "2b2t" : pingRole.trim(); }
+
+	/** Effective "send this event?" flag (falls back to the event's default). */
+	public boolean discordEventEnabled(DiscordEvent e) { return eventSetting(e).enabled; }
+	/** Effective {@code @everyone} ping mode for this event. */
+	public PingMode discordEventPing(DiscordEvent e) { return eventSetting(e).pingMode; }
+	/** Effective "attach the player's gear?" flag (only meaningful for detailable events). */
+	public boolean discordEventDetails(DiscordEvent e) { return Boolean.TRUE.equals(eventSetting(e).details); }
+	/** Effective "attach coordinates (spoiler)?" flag (only meaningful for locatable events). */
+	public boolean discordEventCoords(DiscordEvent e) { return Boolean.TRUE.equals(eventSetting(e).coords); }
+	/** Effective "attach distance to the bot?" flag (only meaningful for locatable events). */
+	public boolean discordEventDistance(DiscordEvent e) { return Boolean.TRUE.equals(eventSetting(e).distance); }
 
 	// --- mutators (master commands / GUI toggles) — each persists immediately ----
 
@@ -174,10 +248,10 @@ public final class StasisBotConfig {
 	public void setDmFeedback(boolean v) { this.dmFeedback = v; save(); }
 	public void setWhisperCommand(String v) { if (v != null && !v.isBlank()) { this.whisperCommand = v.trim(); save(); } }
 
-	/** Replace the whole trigger-word list (cleaned; falls back to "!home" if empty). */
+	/** Replace the whole trigger-word list (cleaned; falls back to the presets if empty). */
 	public void setTriggerWords(List<String> words) {
 		this.triggerWords = cleanWords(words);
-		if (this.triggerWords.isEmpty()) this.triggerWords.add("!home");
+		if (this.triggerWords.isEmpty()) this.triggerWords.addAll(DEFAULT_TRIGGERS);
 		save();
 	}
 
@@ -189,20 +263,54 @@ public final class StasisBotConfig {
 		if (!triggerWords.contains(s)) { triggerWords.add(s); save(); }
 	}
 
-	/** Remove a trigger word; keeps at least "!home" so the bot is never deaf. */
+	/** Remove a trigger word; keeps the presets if you'd empty the list, so the bot is never deaf. */
 	public boolean removeTriggerWord(String word) {
 		if (word == null || triggerWords == null) return false;
 		boolean removed = triggerWords.removeIf(s -> s.equalsIgnoreCase(word.trim()));
 		if (removed) {
-			if (triggerWords.isEmpty()) triggerWords.add("!home");
+			if (triggerWords.isEmpty()) triggerWords.addAll(DEFAULT_TRIGGERS);
 			save();
 		}
 		return removed;
 	}
 	public void setMaster(String v) { this.master = v == null ? "" : v.trim(); save(); }
+	public void setBaseMembersControl(boolean v) { this.baseMembersControl = v; save(); }
 	public void setDebug(boolean v) { this.debug = v; save(); }
 	public void setUseBaritone(boolean v) { this.useBaritone = v; save(); }
 	public void setReturnPos(Integer x, Integer y, Integer z) { this.returnX = x; this.returnY = y; this.returnZ = z; save(); }
+	public void setReturnHomeOnDeath(boolean v) { this.returnHomeOnDeath = v; save(); }
+	public void setDiscordEnabled(boolean v) { this.discordEnabled = v; save(); }
+	public void setDiscordWebhookUrl(String v) { this.discordWebhookUrl = v == null ? "" : v.trim(); save(); }
+	public void setDiscordTestPing(boolean v) { this.discordTestPing = v; save(); }
+	public void setDiscordUseEmbeds(boolean v) { this.discordUseEmbeds = v; save(); }
+	public void setPingTarget(PingTarget v) { this.pingTarget = v == null ? PingTarget.EVERYONE : v; save(); }
+	public void setPingRole(String v) { this.pingRole = (v == null || v.isBlank()) ? "2b2t" : v.trim(); save(); }
+	public void setDiscordEventEnabled(DiscordEvent e, boolean v) { eventSetting(e).enabled = v; save(); }
+	public void setDiscordEventPing(DiscordEvent e, PingMode v) { eventSetting(e).pingMode = v; save(); }
+	public void setDiscordEventDetails(DiscordEvent e, boolean v) { eventSetting(e).details = v; save(); }
+	public void setDiscordEventCoords(DiscordEvent e, boolean v) { eventSetting(e).coords = v; save(); }
+	public void setDiscordEventDistance(DiscordEvent e, boolean v) { eventSetting(e).distance = v; save(); }
+
+	/** Get-or-create the (materialised) settings for one event, filling nulls from its defaults. */
+	private DiscordEventSetting eventSetting(DiscordEvent e) {
+		if (discordEvents == null) discordEvents = new LinkedHashMap<>();
+		DiscordEventSetting s = discordEvents.computeIfAbsent(e.key(), k -> new DiscordEventSetting());
+		if (s.enabled == null) s.enabled = e.defaultEnabled();
+		if (s.pingMode == null) s.pingMode = e.defaultPing();
+		if (s.details == null) s.details = false;
+		if (s.coords == null) s.coords = false;
+		if (s.distance == null) s.distance = false;
+		return s;
+	}
+
+	/** Per-event Discord toggles; nullable so a missing field inherits the event default. */
+	static final class DiscordEventSetting {
+		Boolean enabled;
+		PingMode pingMode;
+		Boolean details;
+		Boolean coords;
+		Boolean distance;
+	}
 
 	/** Configured keywords for a player (never null). */
 	public List<String> aliasesFor(String playerName) {
@@ -293,7 +401,7 @@ public final class StasisBotConfig {
 		}
 		triggerWord = null; // legacy field consumed — never re-serialised
 		triggerWords = cleanWords(triggerWords);
-		if (triggerWords.isEmpty()) triggerWords.add("!home");
+		if (triggerWords.isEmpty()) triggerWords.addAll(DEFAULT_TRIGGERS);
 		if (aliases == null) aliases = new LinkedHashMap<>();
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
 		if (maxChamberDistance < 1) maxChamberDistance = 24;
@@ -311,11 +419,15 @@ public final class StasisBotConfig {
 		if (commandPrefix == null || commandPrefix.isBlank()) commandPrefix = "!sb";
 		if (master == null) master = "";
 		if (rememberMillis < 0L) rememberMillis = 60000L;
+		if (discordWebhookUrl == null) discordWebhookUrl = "";
+		if (discordEvents == null) discordEvents = new LinkedHashMap<>();
+		if (pingTarget == null) pingTarget = PingTarget.EVERYONE;
+		if (pingRole == null || pingRole.isBlank()) pingRole = "2b2t";
 	}
 
 	private static StasisBotConfig withExample() {
 		StasisBotConfig cfg = new StasisBotConfig();
-		cfg.triggerWords = new ArrayList<>(List.of("!home"));
+		cfg.triggerWords = new ArrayList<>(DEFAULT_TRIGGERS);
 		// Seed one illustrative alias so the file documents its own format.
 		// (Real player aliases belong in your local config/stasisbot.json, not in source.)
 		cfg.aliases.put("steve", List.of("tower"));

@@ -8,8 +8,17 @@ import fr.nyuway.stasisbot.gui.StasisMonitorScreen;
 import fr.nyuway.stasisbot.identity.IdentityResolver;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
 import fr.nyuway.stasisbot.scan.ChamberScanner;
+import fr.nyuway.stasisbot.service.BotDeathInfo;
+import fr.nyuway.stasisbot.service.BotActivity;
+import fr.nyuway.stasisbot.service.ChamberWatcher;
+import fr.nyuway.stasisbot.service.DeathWatcher;
+import fr.nyuway.stasisbot.service.DiscordNotifier;
+import fr.nyuway.stasisbot.service.EntityWatcher;
 import fr.nyuway.stasisbot.service.HomeService;
 import fr.nyuway.stasisbot.service.LagMonitor;
+import fr.nyuway.stasisbot.service.PlayerSessionTracker;
+import fr.nyuway.stasisbot.service.PlayerWatcher;
+import fr.nyuway.stasisbot.service.RenderPresence;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
@@ -31,17 +40,31 @@ public final class StasisBotClient implements ClientModInitializer {
 		IdentityResolver identity = new IdentityResolver(config);
 		StasisActivator activator = new StasisActivator(config);
 		LagMonitor lag = new LagMonitor(config.lagThresholdMillis());
-		HomeService homeService = new HomeService(client, config, index, identity, pearls, activator, lag);
+		DiscordNotifier discord = new DiscordNotifier(config);
+		RenderPresence presence = new RenderPresence();
+		BotDeathInfo deathInfo = new BotDeathInfo();
+		PlayerSessionTracker session = new PlayerSessionTracker();
+		BotActivity botActivity = new BotActivity();
+		discord.setPresence(presence);
+		HomeService homeService = new HomeService(client, config, index, identity, pearls, activator, lag, discord, deathInfo, botActivity);
+		PlayerWatcher playerWatcher = new PlayerWatcher(client, config, index, identity, discord, presence, session);
+		ChamberWatcher chamberWatcher = new ChamberWatcher(client, config, index, identity, pearls, discord, session, botActivity);
+		DeathWatcher deathWatcher = new DeathWatcher(client, config, index, identity, discord, presence, deathInfo);
+		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord);
 
 		new HomeRequestListener(config, homeService).register();
+		deathWatcher.register();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
 			lag.onTick();
 			homeService.tick();
+			playerWatcher.tick();
+			chamberWatcher.tick();
+			entityWatcher.tick();
 			while (openMonitor.wasPressed()) {
 				if (c.player != null) {
-					c.setScreen(new StasisMonitorScreen(config, index, pearls));
+					c.setScreen(new StasisMonitorScreen(config, index, pearls, identity));
 				}
 			}
 		});

@@ -23,25 +23,40 @@ public final class HomeRequestListener {
 
 	public void register() {
 		ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, ts) -> {
-			if (sender != null) {
-				homeService.onChatMessage(sender.name(), message.getString());
-			} else {
-				ChatMessageParser.fromRaw(message.getString())
-						.ifPresent(p -> homeService.onChatMessage(p.sender(), p.body()));
-			}
+			String name = sender != null ? sender.name() : null;
+			dispatch(name, message.getString());
 		});
 
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			if (overlay) return;
-			String raw = message.getString();
-			var parsed = ChatMessageParser.fromRaw(raw);
-			if (parsed.isPresent()) {
-				homeService.onChatMessage(parsed.get().sender(), parsed.get().body());
-			} else if (config.debug() && config.matchesTrigger(raw)) {
+			dispatch(null, message.getString());
+		});
+	}
+
+	/**
+	 * Route a raw chat line into the service. Even when the event hands us a
+	 * verified {@code knownSender}, the {@code message} text can still arrive
+	 * server-decorated ({@code <Name> body}, {@code Name whispers: body}), so we
+	 * always run it through {@link ChatMessageParser} to peel the decoration off
+	 * and recover the bare body. Plain content (no decoration) is passed through
+	 * unchanged, with the verified sender.
+	 */
+	private void dispatch(String knownSender, String raw) {
+		var parsed = ChatMessageParser.fromRaw(raw);
+		String sender = knownSender;
+		String body = raw;
+		if (parsed.isPresent()) {
+			if (sender == null) sender = parsed.get().sender();
+			body = parsed.get().body();
+		}
+		if (sender == null || body == null) {
+			if (config.debug() && config.matchesTrigger(raw)) {
 				// A line carries a trigger word but no sender could be extracted — log the
 				// raw shape so an unseen DM format can be added to ChatMessageParser.
 				StasisBot.LOGGER.info("[chat] trigger seen but unparsed: \"{}\"", raw);
 			}
-		});
+			return;
+		}
+		homeService.onChatMessage(sender, body);
 	}
 }

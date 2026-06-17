@@ -69,7 +69,7 @@ brute-force block sweep, so it stays cheap even with a large search radius.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `triggerWords` | `["!home"]` | Chat substrings the bot reacts to — a line matches if it contains **any** of them (handy to vary wording around server anti-spam) |
+| `triggerWords` | `["!home", "pearl", "warp"]` | Keywords that fire a home request. The keyword must be the **first word** of the chat line; extra gibberish after a space is allowed (handy to vary wording around server anti-spam, e.g. `!home xqz`) |
 | `aliases` | `{ }` | player → keywords that identify their sign |
 | `scanChunkRadius` | `2` | chunks around the bot to scan |
 | `maxChamberDistance` | `24` | ignore signs farther than this (blocks) |

@@ -47,6 +47,12 @@ final class RequestQueue {
 		if (name != null) queuedKeys.remove(key(name));
 	}
 
+	/** Drop every waiting requester (e.g. the bot died and respawned far away). */
+	void clear() {
+		queue.clear();
+		queuedKeys.clear();
+	}
+
 	boolean isEmpty() {
 		return queue.isEmpty();
 	}
