@@ -13,6 +13,12 @@ export DISPLAY="${DISPLAY:-:99}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 
+# This server has no sound card and no audio backend (PulseAudio/ALSA), so the
+# OpenAL Soft library LWJGL bundles can't open a real device and Minecraft logs
+# "Failed to open OpenAL device". Force OpenAL Soft's built-in "null" backend,
+# which always opens (silent output) — the game then runs without that error.
+export ALSOFT_DRIVERS="${ALSOFT_DRIVERS:-null}"
+
 # Server the bot auto-joins on launch (quickPlay). Read by build.gradle.
 export STASIS_SERVER="${STASIS_SERVER:-2b2t.org}"
 
