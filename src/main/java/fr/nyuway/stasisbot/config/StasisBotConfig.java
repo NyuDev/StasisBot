@@ -20,7 +20,8 @@ import java.util.stream.Collectors;
  *
  * <p>The mod is driven entirely by chat — there are no in-game commands — so the
  * only knobs live in this hand-editable file. Fields are private and exposed
- * through read-only accessors; nothing mutates the config at runtime.
+ * through read-only accessors. The file is hot-reloaded while the bot runs (see
+ * {@link #reloadFromDisk()}), so editing it applies live without a restart.
  */
 public final class StasisBotConfig {
 
@@ -387,6 +388,72 @@ public final class StasisBotConfig {
 		} catch (IOException e) {
 			StasisBot.LOGGER.error("Could not write config", e);
 		}
+	}
+
+	/**
+	 * Re-read the config file and copy its values into <em>this</em> live instance,
+	 * so every collaborator already holding this config sees the edit — no restart.
+	 * Returns true when the file was read and applied. Anything read through an
+	 * accessor at use-time updates immediately; the few values captured by value at
+	 * startup (e.g. the lag monitor's threshold) still need a restart.
+	 */
+	public boolean reloadFromDisk() {
+		Path path = path();
+		try {
+			if (!Files.exists(path)) return false;
+			StasisBotConfig fresh = GSON.fromJson(Files.readString(path), StasisBotConfig.class);
+			if (fresh == null) return false;
+			fresh.sanitise();
+			copyFrom(fresh);
+			return true;
+		} catch (Exception e) {
+			StasisBot.LOGGER.error("Config hot-reload failed; keeping the running config", e);
+			return false;
+		}
+	}
+
+	/** Copy every field from a freshly-parsed config into this live instance. */
+	private void copyFrom(StasisBotConfig o) {
+		this.triggerWord = o.triggerWord;
+		this.triggerWords = o.triggerWords;
+		this.scanChunkRadius = o.scanChunkRadius;
+		this.maxChamberDistance = o.maxChamberDistance;
+		this.triggerSearchRadius = o.triggerSearchRadius;
+		this.pearlSearchRadius = o.pearlSearchRadius;
+		this.indexTtlMillis = o.indexTtlMillis;
+		this.reach = o.reach;
+		this.autoLook = o.autoLook;
+		this.dmFeedback = o.dmFeedback;
+		this.whisperCommand = o.whisperCommand;
+		this.autoWalk = o.autoWalk;
+		this.navTimeoutMillis = o.navTimeoutMillis;
+		this.navStuckMillis = o.navStuckMillis;
+		this.navGoalRange = o.navGoalRange;
+		this.language = o.language;
+		this.dropPearlForPlayer = o.dropPearlForPlayer;
+		this.reopenTrigger = o.reopenTrigger;
+		this.returnHome = o.returnHome;
+		this.returnX = o.returnX;
+		this.returnY = o.returnY;
+		this.returnZ = o.returnZ;
+		this.requireOnline = o.requireOnline;
+		this.lagThresholdMillis = o.lagThresholdMillis;
+		this.arrivalTimeoutMillis = o.arrivalTimeoutMillis;
+		this.master = o.master;
+		this.baseMembersControl = o.baseMembersControl;
+		this.commandPrefix = o.commandPrefix;
+		this.debug = o.debug;
+		this.useBaritone = o.useBaritone;
+		this.rememberMillis = o.rememberMillis;
+		this.returnHomeOnDeath = o.returnHomeOnDeath;
+		this.discordEnabled = o.discordEnabled;
+		this.discordWebhookUrl = o.discordWebhookUrl;
+		this.discordTestPing = o.discordTestPing;
+		this.discordUseEmbeds = o.discordUseEmbeds;
+		this.pingTarget = o.pingTarget;
+		this.pingRole = o.pingRole;
+		this.discordEvents = o.discordEvents;
+		this.aliases = o.aliases;
 	}
 
 	private static Path path() {
