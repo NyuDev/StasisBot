@@ -8,6 +8,7 @@ import fr.nyuway.stasisbot.gui.StasisMonitorScreen;
 import fr.nyuway.stasisbot.identity.IdentityResolver;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
 import fr.nyuway.stasisbot.scan.ChamberScanner;
+import fr.nyuway.stasisbot.service.AutoReconnect;
 import fr.nyuway.stasisbot.service.BotDeathInfo;
 import fr.nyuway.stasisbot.service.BotActivity;
 import fr.nyuway.stasisbot.service.ChamberWatcher;
@@ -51,12 +52,14 @@ public final class StasisBotClient implements ClientModInitializer {
 		ChamberWatcher chamberWatcher = new ChamberWatcher(client, config, index, identity, pearls, discord, session, botActivity);
 		DeathWatcher deathWatcher = new DeathWatcher(client, config, index, identity, discord, presence, deathInfo);
 		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord);
+		AutoReconnect autoReconnect = new AutoReconnect(client);
 
 		new HomeRequestListener(config, homeService).register();
 		deathWatcher.register();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
+			autoReconnect.tick();
 			lag.onTick();
 			homeService.tick();
 			playerWatcher.tick();
