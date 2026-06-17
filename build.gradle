@@ -22,6 +22,20 @@ loom {
 	runs {
 		client {
 			programArgs "--username", "Shasync"
+
+			// Headless / Docker run (opt-in: `runClient -Pdevauth`). Authenticates a
+			// REAL Microsoft account via DevAuth (OAuth device-code; no password stored)
+			// and, when STASIS_SERVER is set, auto-joins that server on launch.
+			if (project.hasProperty("devauth")) {
+				property "devauth.enabled", "true"
+				property "devauth.account", "main"
+				property "devauth.configDir", "${projectDir}/run/devauth"
+				vmArgs "-Xmx3G"
+				def headlessServer = System.getenv("STASIS_SERVER")
+				if (headlessServer != null && !headlessServer.trim().isEmpty()) {
+					programArgs "--quickPlayMultiplayer", headlessServer
+				}
+			}
 		}
 	}
 }
@@ -40,6 +54,17 @@ dependencies {
 	// Meteor Client — dev-only, so we can test the anti-AFK bridge live. Runtime-only
 	// (our code only touches Meteor via reflection) and never shipped in the built mod.
 	modRuntimeOnly "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
+}
+
+// DevAuth — opt-in dev-runtime auth for headless / Docker runs (`-Pdevauth`).
+// `modRuntimeOnly` keeps it entirely out of the published mod jar.
+if (project.hasProperty("devauth")) {
+	repositories {
+		maven { url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1" }
+	}
+	dependencies {
+		modRuntimeOnly "me.djtheredstoner:DevAuth-fabric:1.2.2"
+	}
 }
 
 processResources {

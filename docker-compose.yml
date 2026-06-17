@@ -1,0 +1,37 @@
+# StasisBot — headless on a remote server (e.g. 2b2t).
+#
+# FIRST RUN (one-time, interactive): DevAuth prints a microsoft.com/link code,
+# open it in a browser and sign in with your Microsoft account:
+#
+#     docker compose run --rm stasisbot
+#
+# After the account token is cached (in ./run/devauth/) you can run it detached:
+#
+#     docker compose up -d
+#     docker compose logs -f
+#
+services:
+  stasisbot:
+    build: .
+    image: stasisbot-headless
+    container_name: stasisbot
+    stdin_open: true          # keep STDIN open for the one-time OAuth prompt
+    tty: true
+    ports:
+      # DevAuth's OAuth callback: Microsoft redirects your browser to
+      # http://127.0.0.1:3000 after sign-in, which must reach the container.
+      # Only needed for the one-time login; harmless to leave mapped.
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Server the bot auto-joins on launch. Override in a .env file or here.
+      STASIS_SERVER: "${STASIS_SERVER:-2b2t.org}"
+    volumes:
+      # Minecraft / mappings / library caches — keeps restarts fast.
+      - gradle-cache:/root/.gradle
+      # Your mod config (run/config/stasisbot.json) and the DevAuth OAuth token
+      # (run/devauth/) live here and persist across container restarts.
+      - ./run:/app/run
+    restart: unless-stopped
+
+volumes:
+  gradle-cache:

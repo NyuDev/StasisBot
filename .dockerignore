@@ -1,0 +1,8 @@
+# Keep the build context small and free of host artifacts / secrets.
+.git/
+.gradle/
+build/
+run/
+out/
+.vscode/
+*.log
