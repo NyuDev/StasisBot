@@ -69,6 +69,7 @@ public final class ChamberWatcher {
 	private final PlayerFeedback feedback;
 	private final PlayerSessionTracker session;
 	private final BotActivity botActivity;
+	private final WorldSettleTracker settle;
 
 	/** Trigger block (as a long) → did it hold a pearl on the last scan? */
 	private final Map<Long, Boolean> loaded = new HashMap<>();
@@ -105,7 +106,7 @@ public final class ChamberWatcher {
 
 	public ChamberWatcher(MinecraftClient client, StasisBotConfig config, ChamberIndex index,
 	                      IdentityResolver identity, PearlDetector pearls, DiscordNotifier discord,
-	                      PlayerSessionTracker session, BotActivity botActivity) {
+	                      PlayerSessionTracker session, BotActivity botActivity, WorldSettleTracker settle) {
 		this.client = client;
 		this.config = config;
 		this.index = index;
@@ -114,6 +115,7 @@ public final class ChamberWatcher {
 		this.discord = discord;
 		this.session = session;
 		this.botActivity = botActivity;
+		this.settle = settle;
 		this.feedback = new PlayerFeedback(client, config);
 	}
 
@@ -135,6 +137,15 @@ public final class ChamberWatcher {
 		ClientWorld world = client.world;
 		ClientPlayerEntity self = client.player;
 		if (world == null || self == null) { reset(); return; }
+
+		// Just respawned / reconnected: suspended pearls re-stream with fresh state.
+		// Re-seed silently and drop any in-flight pending so the reload isn't reported
+		// as a wave of recharges/opens (the pearls were already there before dying).
+		if (settle.settling()) {
+			primed = false;
+			pendingFreshPearls.clear();
+			pendingReleases.clear();
+		}
 
 		List<StasisChamber> chambers = index.chambers(world, self.getBlockPos());
 		// A trap the bot just fired/re-armed flips its open state too; don't report that

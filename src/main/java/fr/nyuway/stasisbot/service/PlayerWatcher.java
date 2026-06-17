@@ -46,6 +46,7 @@ public final class PlayerWatcher {
 	private final PlayerFeedback feedback;
 	private final RenderPresence presence;
 	private final PlayerSessionTracker session;
+	private final WorldSettleTracker settle;
 
 	private final Set<String> present = new HashSet<>();
 	private final Set<String> prevTab = new HashSet<>();   // who was online last tick (to split connect vs walk-in)
@@ -54,7 +55,7 @@ public final class PlayerWatcher {
 
 	public PlayerWatcher(MinecraftClient client, StasisBotConfig config, ChamberIndex index,
 	                     IdentityResolver identity, DiscordNotifier discord, RenderPresence presence,
-	                     PlayerSessionTracker session) {
+	                     PlayerSessionTracker session, WorldSettleTracker settle) {
 		this.client = client;
 		this.config = config;
 		this.index = index;
@@ -62,6 +63,7 @@ public final class PlayerWatcher {
 		this.discord = discord;
 		this.presence = presence;
 		this.session = session;
+		this.settle = settle;
 		this.feedback = new PlayerFeedback(client, config);
 	}
 
@@ -74,6 +76,11 @@ public final class PlayerWatcher {
 		ClientWorld world = client.world;
 		ClientPlayerEntity self = client.player;
 		if (world == null || self == null) { reset(); return; }
+
+		// Just respawned / reconnected: the player list re-streams. Re-seed silently
+		// (presence below still updates) so the reload isn't reported as everyone
+		// leaving and re-entering the bot's render distance.
+		if (settle.settling()) primed = false;
 
 		String selfName = self.getGameProfile().name();
 		Map<String, PlayerEntity> near = new HashMap<>();

@@ -83,11 +83,9 @@ final class DeathRespawnController {
 		// Flush a deferred bot-death announcement once the server's death message has
 		// landed (so we can quote the cause), or after a short grace if it never does.
 		if (deathAnnouncePending) {
-			String reason = deathInfo != null ? deathInfo.recentReason() : null;
-			if (reason != null || System.currentTimeMillis() - deathDetectedAt > DEATH_REASON_GRACE_MILLIS) {
-				deathAnnouncePending = false;
-				owner.announceGlobal(DiscordEvent.BOT_DIED, DiscordText.died(config.language(), reason));
-				if (deathInfo != null) deathInfo.clear();
+			boolean reasonReady = deathInfo != null && deathInfo.recentReason() != null;
+			if (reasonReady || System.currentTimeMillis() - deathDetectedAt > DEATH_REASON_GRACE_MILLIS) {
+				flushDeathAnnounce();
 			}
 		}
 
@@ -117,6 +115,9 @@ final class DeathRespawnController {
 		// until the respawn has actually settled (the awaitingReturn block below).
 		if (deadHandled) {
 			deadHandled = false;
+			// Announce the death before the respawn, even when the respawn beat the
+			// death-cause grace window — otherwise Discord shows "respawned" above "died".
+			flushDeathAnnounce();
 			owner.announceGlobal(DiscordEvent.BOT_RESPAWNED, DiscordText.respawned(config.language()));
 			awaitingReturn = returningFromDeath;
 			returningFromDeath = false;
@@ -158,6 +159,15 @@ final class DeathRespawnController {
 			}
 		}
 		return false;
+	}
+
+	/** Announce the pending bot-death now (with the parsed cause if any), exactly once. */
+	private void flushDeathAnnounce() {
+		if (!deathAnnouncePending) return;
+		deathAnnouncePending = false;
+		String reason = deathInfo != null ? deathInfo.recentReason() : null;
+		owner.announceGlobal(DiscordEvent.BOT_DIED, DiscordText.died(config.language(), reason));
+		if (deathInfo != null) deathInfo.clear();
 	}
 
 	/**

@@ -60,6 +60,7 @@ public final class EntityWatcher {
 	private final ChamberIndex index;
 	private final IdentityResolver identity;
 	private final DiscordNotifier discord;
+	private final WorldSettleTracker settle;
 	private final PlayerFeedback feedback;
 
 	private final Map<Integer, PearlTrack> pearls = new HashMap<>();
@@ -70,12 +71,13 @@ public final class EntityWatcher {
 	private long lastCheck = 0L;
 
 	public EntityWatcher(MinecraftClient client, StasisBotConfig config, ChamberIndex index,
-	                     IdentityResolver identity, DiscordNotifier discord) {
+	                     IdentityResolver identity, DiscordNotifier discord, WorldSettleTracker settle) {
 		this.client = client;
 		this.config = config;
 		this.index = index;
 		this.identity = identity;
 		this.discord = discord;
+		this.settle = settle;
 		this.feedback = new PlayerFeedback(client, config);
 	}
 
@@ -97,6 +99,11 @@ public final class EntityWatcher {
 		ClientWorld world = client.world;
 		ClientPlayerEntity self = client.player;
 		if (world == null || self == null) { reset(); return; }
+
+		// Just respawned / reconnected: the world is re-streaming entities with fresh
+		// ids. Drop back to baseline-only so the reload isn't reported as a wave of
+		// new placements/teleports (re-primes silently once the world has settled).
+		if (settle.settling()) primed = false;
 
 		Map<Integer, PearlTrack> currentPearls = new HashMap<>();
 		Map<Integer, Vec3d> currentCrystals = new HashMap<>();

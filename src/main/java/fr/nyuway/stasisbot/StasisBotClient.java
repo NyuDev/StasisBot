@@ -21,6 +21,7 @@ import fr.nyuway.stasisbot.service.LagMonitor;
 import fr.nyuway.stasisbot.service.PlayerSessionTracker;
 import fr.nyuway.stasisbot.service.PlayerWatcher;
 import fr.nyuway.stasisbot.service.RenderPresence;
+import fr.nyuway.stasisbot.service.WorldSettleTracker;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
@@ -47,12 +48,13 @@ public final class StasisBotClient implements ClientModInitializer {
 		BotDeathInfo deathInfo = new BotDeathInfo();
 		PlayerSessionTracker session = new PlayerSessionTracker();
 		BotActivity botActivity = new BotActivity();
+		WorldSettleTracker settle = new WorldSettleTracker(client);
 		discord.setPresence(presence);
 		HomeService homeService = new HomeService(client, config, index, identity, pearls, activator, lag, discord, deathInfo, botActivity);
-		PlayerWatcher playerWatcher = new PlayerWatcher(client, config, index, identity, discord, presence, session);
-		ChamberWatcher chamberWatcher = new ChamberWatcher(client, config, index, identity, pearls, discord, session, botActivity);
+		PlayerWatcher playerWatcher = new PlayerWatcher(client, config, index, identity, discord, presence, session, settle);
+		ChamberWatcher chamberWatcher = new ChamberWatcher(client, config, index, identity, pearls, discord, session, botActivity, settle);
 		DeathWatcher deathWatcher = new DeathWatcher(client, config, index, identity, discord, presence, deathInfo);
-		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord);
+		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord, settle);
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 
@@ -61,6 +63,7 @@ public final class StasisBotClient implements ClientModInitializer {
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
+			settle.tick();
 			configWatcher.tick();
 			autoReconnect.tick();
 			lag.onTick();
