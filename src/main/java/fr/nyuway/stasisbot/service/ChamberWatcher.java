@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static fr.nyuway.stasisbot.service.Proximity.distanceTo;
+
 /**
  * Detects when a chamber gets a fresh pearl — i.e. someone (re)armed a stasis —
  * and announces it to Discord ({@link DiscordEvent#STASIS_RECHARGED}). It also
@@ -441,11 +443,6 @@ public final class ChamberWatcher {
 			}
 		}
 		return best;
-	}
-
-	/** Whole-block distance from the bot to a position, for the optional distance tag. */
-	private static int distanceTo(ClientPlayerEntity self, BlockPos pos) {
-		return (int) Math.round(Math.sqrt(self.squaredDistanceTo(Vec3d.ofCenter(pos))));
 	}
 
 	/** Whether the named player matches a detected stasis sign (i.e. is a base member). */

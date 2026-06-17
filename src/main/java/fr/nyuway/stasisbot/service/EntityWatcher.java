@@ -20,6 +20,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static fr.nyuway.stasisbot.service.Proximity.distanceTo;
+
 /**
  * Watches the entities around the bot and reports two combat-relevant things to
  * Discord: ender-pearl teleports ({@link DiscordEvent#PEARL_THROWN}) and end
@@ -236,11 +238,6 @@ public final class EntityWatcher {
 			if (c.matchesAny(tokens)) return true;
 		}
 		return false;
-	}
-
-	/** Whole-block distance from the bot to a position, for the optional distance tag. */
-	private static int distanceTo(ClientPlayerEntity self, BlockPos pos) {
-		return (int) Math.round(Math.sqrt(self.squaredDistanceTo(Vec3d.ofCenter(pos))));
 	}
 
 	private void reset() {

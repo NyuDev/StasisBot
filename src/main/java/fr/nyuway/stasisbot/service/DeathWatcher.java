@@ -11,10 +11,11 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
 
 import java.util.Locale;
 import java.util.Set;
+
+import static fr.nyuway.stasisbot.service.Proximity.distanceTo;
 
 /**
  * Reports player deaths that happen around the bot to Discord ({@link
@@ -140,11 +141,6 @@ public final class DeathWatcher {
 			if (victim.equalsIgnoreCase(p.getGameProfile().name())) return p.getBlockPos();
 		}
 		return null;
-	}
-
-	/** Whole-block distance from the bot to a position, for the optional distance tag. */
-	private static int distanceTo(ClientPlayerEntity self, BlockPos pos) {
-		return (int) Math.round(Math.sqrt(self.squaredDistanceTo(Vec3d.ofCenter(pos))));
 	}
 
 	/** The first whitespace-delimited token of the line (the victim's name), or null. */
