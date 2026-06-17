@@ -39,6 +39,37 @@ EOF
 # is then cached in run/devauth/microsoft_accounts.json after the one-time login.
 mkdir -p "/app/run/devauth"
 
+# --- Headless render tuning -------------------------------------------------
+# There's no GPU here: OpenGL goes through Mesa llvmpipe (software), so every
+# rendered frame is rasterized on the CPU. With the default client options
+# (renderDistance 16, maxFps 120, "fancy" graphics) the game pegs several cores
+# and the game loop — which runs ticking *and* rendering on the same thread —
+# starves, so the bot lags and looks frozen. A bot only needs the tick loop
+# (20 TPS), not smooth visuals, so we cap the frame rate and strip rendering to
+# the minimum. Written into the persisted options.txt, idempotently: replace the
+# key if present, append it otherwise. Tune via env if you ever need to.
+OPTS="/app/run/options.txt"
+touch "${OPTS}"
+set_opt() {
+	local key="$1" val="$2"
+	if grep -q "^${key}:" "${OPTS}"; then
+		sed -i "s|^${key}:.*|${key}:${val}|" "${OPTS}"
+	else
+		printf '%s:%s\n' "${key}" "${val}" >>"${OPTS}"
+	fi
+}
+set_opt maxFps "${SB_MAX_FPS:-10}"
+set_opt renderDistance "${SB_RENDER_DISTANCE:-6}"
+set_opt simulationDistance "${SB_SIMULATION_DISTANCE:-6}"
+set_opt enableVsync false
+set_opt graphicsPreset '"fast"'
+set_opt entityShadows false
+set_opt renderClouds '"false"'
+set_opt mipmapLevels 0
+set_opt biomeBlendRadius 0
+set_opt particles 2
+echo "[stasisbot] render tuning: maxFps=${SB_MAX_FPS:-10} renderDistance=${SB_RENDER_DISTANCE:-6}"
+
 echo "[stasisbot] starting Xvfb on ${DISPLAY} ..."
 Xvfb "${DISPLAY}" -screen 0 1280x720x24 -ac +extension GLX +render -noreset \
 	>/tmp/xvfb.log 2>&1 &
