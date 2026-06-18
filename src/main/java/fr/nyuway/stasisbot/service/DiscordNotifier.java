@@ -18,11 +18,19 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Fire-and-forget Discord webhook sender. Posts short JSON messages to a
- * user-configured webhook on a background thread so the game tick never blocks.
+ * Discord webhook sender. Posts short JSON messages to a user-configured webhook
+ * from the game tick without ever blocking it: each message is handed to a single
+ * background thread that sends them <em>one at a time, in submission order</em>.
+ *
+ * <p>Ordering matters — a home request fires several events back-to-back
+ * (requested → fired → pulled in → reopened → dropped). Posting them with
+ * independent async requests let them race over the network and land out of order
+ * in the channel; a single serial sender keeps the timeline correct.
  *
  * <p>For safety, only genuine Discord webhook hosts are accepted — this stops the
  * bot from being pointed at an arbitrary (possibly internal) address, i.e. a
@@ -37,6 +45,12 @@ public final class DiscordNotifier {
 	private final HttpClient http = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(10))
 			.build();
+	/** Single worker so webhook POSTs go out strictly in the order they're queued. */
+	private final ExecutorService sender = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "StasisBot-Discord");
+		t.setDaemon(true);
+		return t;
+	});
 
 	/** Optional: when set, gates @everyone pings on an outsider being in render. */
 	private RenderPresence presence;
@@ -174,14 +188,37 @@ public final class DiscordNotifier {
 			StasisBot.LOGGER.warn("[discord] bad webhook URL: {}", e.toString());
 			return CompletableFuture.completedFuture(false);
 		}
-		return http.sendAsync(req, HttpResponse.BodyHandlers.discarding())
-				.handle((resp, err) -> {
-					if (err != null) {
-						StasisBot.LOGGER.warn("[discord] webhook error: {}", err.toString());
-						return false;
-					}
-					return resp.statusCode() >= 200 && resp.statusCode() < 300;
-				});
+		// Queue on the single sender thread: posts leave in order, one fully delivered
+		// before the next starts, so Discord timestamps them in the right sequence.
+		CompletableFuture<Boolean> result = new CompletableFuture<>();
+		try {
+			sender.execute(() -> result.complete(sendBlocking(req)));
+		} catch (RuntimeException e) { // executor rejected (shutting down)
+			result.complete(false);
+		}
+		return result;
+	}
+
+	/** Send one webhook request and wait for it, retrying once if Discord rate-limits us. */
+	private boolean sendBlocking(HttpRequest req) {
+		try {
+			HttpResponse<Void> resp = http.send(req, HttpResponse.BodyHandlers.discarding());
+			if (resp.statusCode() == 429) {
+				long waitMs = resp.headers().firstValue("Retry-After")
+						.map(v -> { try { return (long) (Double.parseDouble(v.trim()) * 1000); }
+								catch (NumberFormatException nfe) { return 1000L; } })
+						.orElse(1000L);
+				Thread.sleep(Math.min(Math.max(waitMs, 0L) + 100L, 10000L));
+				resp = http.send(req, HttpResponse.BodyHandlers.discarding());
+			}
+			return resp.statusCode() >= 200 && resp.statusCode() < 300;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		} catch (Exception e) {
+			StasisBot.LOGGER.warn("[discord] webhook error: {}", e.toString());
+			return false;
+		}
 	}
 
 	// Discord brand colours used for the embed accent bar.
