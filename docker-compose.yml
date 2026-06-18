@@ -10,6 +10,22 @@
 #     docker compose up -d
 #     docker compose logs -f
 #
+# ADD / SWITCH ACCOUNT: a second account ("alt") is pre-declared in
+# run/devauth/config.toml. Authenticate it once, then switch with STASIS_ACCOUNT:
+#
+#     docker compose stop
+#     docker compose run --rm -e STASIS_ACCOUNT=alt stasisbot
+#       -> DevAuth prints a microsoft.com/link code; open it on any device and
+#          sign in with the OTHER Microsoft account. Wait for "Setting user: <name>",
+#          then Ctrl+C.
+#     echo "STASIS_ACCOUNT=alt" >> .env      # make it the account used from now on
+#     docker compose up -d
+#
+# Switch back anytime by setting STASIS_ACCOUNT=main (or alt) in .env + `up -d`.
+# (If DevAuth shows a login URL that redirects to 127.0.0.1:3000 instead of a
+# code, re-run the auth over an SSH tunnel: ssh -L 3000:127.0.0.1:3000 … and add
+# --service-ports to the `run` command.)
+#
 services:
   stasisbot:
     build: .
@@ -25,6 +41,9 @@ services:
     environment:
       # Server the bot auto-joins on launch. Override in a .env file or here.
       STASIS_SERVER: "${STASIS_SERVER:-2b2t.org}"
+      # DevAuth account to log in as — see run/devauth/config.toml ("main", "alt", …).
+      # Authenticate a new account once (see README), then set this to switch to it.
+      STASIS_ACCOUNT: "${STASIS_ACCOUNT:-main}"
       # Client render distance (entrypoint writes it into options.txt). Kept high
       # because the bot's surveillance (player/chamber/entity watchers) only sees
       # chunks the client loads. Capped in practice by 2b2t's server view-distance.

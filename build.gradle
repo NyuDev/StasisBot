@@ -28,7 +28,10 @@ loom {
 			// and, when STASIS_SERVER is set, auto-joins that server on launch.
 			if (project.hasProperty("devauth")) {
 				property "devauth.enabled", "true"
-				property "devauth.account", "main"
+				// Which DevAuth account to log in as (see run/devauth/config.toml: main, alt, …).
+				// Override with the STASIS_ACCOUNT env var to switch between authenticated accounts.
+				def account = System.getenv("STASIS_ACCOUNT")
+				property "devauth.account", (account != null && !account.trim().isEmpty()) ? account.trim() : "main"
 				property "devauth.configDir", "${projectDir}/run/devauth"
 				vmArgs "-Xmx3G"
 				def headlessServer = System.getenv("STASIS_SERVER")
