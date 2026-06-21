@@ -204,6 +204,14 @@ public final class HomeService {
 		ClientPlayerEntity self = client.player;
 		if (self == null) return;
 		if (senderName.equalsIgnoreCase(self.getGameProfile().name())) return; // ignore the bot itself
+		// Already at the base: don't waste a pearl pulling in someone who's standing in
+		// the bot's render distance. On by default; turn off with skipIfPresent=false.
+		if (config.skipIfPresent() && isInRenderDistance(senderName)) {
+			StasisBot.LOGGER.info("[home] '{}' ignored — already in render distance", senderName);
+			feedback.debug("home from '" + senderName + "' ignored — already here");
+			feedback.whisper(senderName, Messages.Key.ALREADY_HERE);
+			return;
+		}
 		if (senderName.equalsIgnoreCase(currentSender)) {                      // already being served
 			StasisBot.LOGGER.info("[home] '{}' ignored — already being served", senderName);
 			return;
@@ -220,6 +228,17 @@ public final class HomeService {
 		if (ahead > 0) {
 			feedback.whisper(senderName, Messages.Key.QUEUED, ahead);
 		}
+	}
+
+	/** True when a player with this name is currently within the bot's render distance. */
+	private boolean isInRenderDistance(String name) {
+		ClientWorld world = client.world;
+		if (world == null || name == null) return false;
+		for (var p : world.getPlayers()) {
+			String n = p.getGameProfile().name();
+			if (n != null && n.equalsIgnoreCase(name)) return true;
+		}
+		return false;
 	}
 
 	// --- tick dispatch -------------------------------------------------------

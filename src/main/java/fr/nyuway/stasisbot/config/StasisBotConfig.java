@@ -97,6 +97,8 @@ public final class StasisBotConfig {
 	private Integer returnZ = null;
 	/** Don't teleport a player who isn't in the server player list. */
 	private boolean requireOnline = true;
+	/** Don't teleport a player who is already within the bot's render distance (already at base). */
+	private boolean skipIfPresent = true;
 	/** Treat the server as lagging when client ticks stall beyond this (ms). */
 	private long lagThresholdMillis = 250L;
 	/** How long (ms) to wait for the player to actually appear after firing. */
@@ -207,6 +209,7 @@ public final class StasisBotConfig {
 	public Integer returnZ() { return returnZ; }
 	public boolean hasReturnPos() { return returnX != null && returnY != null && returnZ != null; }
 	public boolean requireOnline() { return requireOnline; }
+	public boolean skipIfPresent() { return skipIfPresent; }
 	public long lagThresholdMillis() { return lagThresholdMillis; }
 	public long arrivalTimeoutMillis() { return arrivalTimeoutMillis; }
 	public String master() { return master; }
@@ -437,6 +440,7 @@ public final class StasisBotConfig {
 		this.returnY = o.returnY;
 		this.returnZ = o.returnZ;
 		this.requireOnline = o.requireOnline;
+		this.skipIfPresent = o.skipIfPresent;
 		this.lagThresholdMillis = o.lagThresholdMillis;
 		this.arrivalTimeoutMillis = o.arrivalTimeoutMillis;
 		this.master = o.master;

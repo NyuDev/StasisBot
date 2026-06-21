@@ -12,6 +12,7 @@ public final class Messages {
 
 	public enum Key {
 		QUEUED, ON_MY_WAY, RELEASING, EMPTY, TOO_FAR, PATH_FAIL, PEARL_GONE,
+		ALREADY_HERE,
 		DONE, NOT_CONFIRMED, RETRYING,
 		TP_FAILED_LAG, TP_FAILED_OFFLINE,
 		REARM_OK, REARM_NOPEARL,
@@ -28,6 +29,7 @@ public final class Messages {
 			Map.entry(Key.TOO_FAR, "Your stasis is too far (auto-walk off)."),
 			Map.entry(Key.PATH_FAIL, "Couldn't reach your stasis."),
 			Map.entry(Key.PEARL_GONE, "Pearl vanished — try again."),
+			Map.entry(Key.ALREADY_HERE, "You're already here — no teleport needed."),
 			Map.entry(Key.DONE, "Done — you've been pulled."),
 			Map.entry(Key.NOT_CONFIRMED, "TP fired but you didn't appear — try again."),
 			Map.entry(Key.RETRYING, "TP not confirmed — trying another stasis."),
@@ -56,6 +58,7 @@ public final class Messages {
 			Map.entry(Key.TOO_FAR, "Ta stasis est trop loin (auto-walk off)."),
 			Map.entry(Key.PATH_FAIL, "Je n'ai pas pu atteindre ta stasis."),
 			Map.entry(Key.PEARL_GONE, "Perle disparue — reessaie."),
+			Map.entry(Key.ALREADY_HERE, "Tu es deja la — pas besoin de te teleporter."),
 			Map.entry(Key.DONE, "C'est fait — tu es teleporte."),
 			Map.entry(Key.NOT_CONFIRMED, "La TP a ete lancee mais tu n'es pas apparu — reessaie."),
 			Map.entry(Key.RETRYING, "TP non confirmee — j'essaie une autre stasis."),
