@@ -48,6 +48,9 @@ services:
       # because the bot's surveillance (player/chamber/entity watchers) only sees
       # chunks the client loads. Capped in practice by 2b2t's server view-distance.
       SB_RENDER_DISTANCE: "${SB_RENDER_DISTANCE:-32}"
+      # Set to 1 to load ViaFabricPlus (connect to a server on a different protocol
+      # version). Off by default — the bot runs identically without it.
+      STASIS_VIA: "${STASIS_VIA:-}"
     volumes:
       # Minecraft / mappings / library caches — keeps restarts fast.
       - gradle-cache:/root/.gradle

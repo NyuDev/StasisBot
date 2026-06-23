@@ -68,12 +68,15 @@ jobs:
       # Override only the per-version coordinates; everything else (loader, mod
       # source) is shared. The committed defaults stay 1.21.11 so the VPS Docker
       # build, which never passes these, keeps building the verified version.
+      # jarOnly: skip the dev-runtime mods (Meteor, ViaFabricPlus) — the jar never
+      # bundles them and they're pinned to a single MC version.
       - name: Build
         run: |
           ./gradlew build \
             -Pminecraft_version=${{ matrix.mc }} \
             -Pyarn_mappings=${{ matrix.yarn }} \
             -Pfabric_version=${{ matrix.fabric }} \
+            -PjarOnly \
             --stacktrace --no-daemon
 
       - name: Upload jar

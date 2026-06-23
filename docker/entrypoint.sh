@@ -113,9 +113,21 @@ if [ "${display_ready}" != "true" ]; then
 	exit 1
 fi
 
+# Opt-in: load ViaFabricPlus so the bot can connect to a server on a different
+# protocol version. Off by default (keeps the run identical), enable with
+# STASIS_VIA=1. After enabling, the target/auto version still has to be set in
+# ViaFabricPlus — see the README.
+GRADLE_ARGS="runClient -Pdevauth"
+case "${STASIS_VIA:-}" in
+	1|true|TRUE|yes|on)
+		GRADLE_ARGS="${GRADLE_ARGS} -PwithVia"
+		echo "[stasisbot] ViaFabricPlus enabled (STASIS_VIA) — multi-protocol on"
+		;;
+esac
+
 echo "[stasisbot] launching headless client -> server: ${STASIS_SERVER}"
 echo "[stasisbot] first run only: DevAuth logs an 'OAuth URL' below."
 echo "[stasisbot] open that URL once in a browser and sign in; Microsoft redirects"
 echo "[stasisbot] to 127.0.0.1:3000 and the token is then cached in run/devauth/."
 
-exec ./gradlew --no-daemon --console=plain runClient -Pdevauth
+exec ./gradlew --no-daemon --console=plain ${GRADLE_ARGS}

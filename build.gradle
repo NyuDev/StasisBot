@@ -18,6 +18,8 @@ repositories {
 	maven { url "https://maven.meteordev.org/releases" }
 	// babbaj hosts nether-pathfinder, a native lib Baritone loads at startup.
 	maven { url "https://babbaj.github.io/maven/" }
+	// CurseForge proxy maven, for ViaFabricPlus (the headless multi-protocol mod).
+	maven { url "https://www.cursemaven.com" }
 }
 
 loom {
@@ -56,9 +58,20 @@ dependencies {
 	// Native pathfinder Baritone constructs at startup (else NoClassDefFoundError).
 	runtimeOnly "dev.babbaj:nether-pathfinder:1.6"
 
-	// Meteor Client — dev-only, so we can test the anti-AFK bridge live. Runtime-only
-	// (our code only touches Meteor via reflection) and never shipped in the built mod.
-	modRuntimeOnly "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
+	// Dev-runtime mods: loaded only for the actual headless runClient, never compiled
+	// against or shipped in the jar. Skipped with -PjarOnly for the multi-version jar
+	// builds (they're tied to a specific MC version and the jar doesn't need them).
+	if (!project.hasProperty("jarOnly")) {
+		// Meteor Client — so the bot's anti-AFK bridge (reflection-only) works live.
+		modRuntimeOnly "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
+		// ViaFabricPlus — lets the headless bot connect to a server on a different
+		// protocol version (e.g. a future 2b2t update) while staying on this client.
+		// Opt-in (-PwithVia, set by the entrypoint when STASIS_VIA is on) so the default
+		// run is unchanged; pinned to the 1.21.11 build (CurseForge file id).
+		if (project.hasProperty("withVia")) {
+			modRuntimeOnly "curse.maven:viafabricplus-830604:7847785"
+		}
+	}
 }
 
 // DevAuth — opt-in dev-runtime auth for headless / Docker runs (`-Pdevauth`).
