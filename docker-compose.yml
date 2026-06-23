@@ -39,8 +39,10 @@ services:
       # Only needed for the one-time login; harmless to leave mapped.
       - "127.0.0.1:3000:3000"
     environment:
-      # Server the bot auto-joins on launch. Override in a .env file or here.
-      STASIS_SERVER: "${STASIS_SERVER:-2b2t.org}"
+      # Server the bot auto-joins on launch (host or host:port). Defaults to a local
+      # server; set STASIS_SERVER in a .env (or here) to your target — e.g. our VPS
+      # uses STASIS_SERVER=2b2t.org.
+      STASIS_SERVER: "${STASIS_SERVER:-127.0.0.1:25565}"
       # DevAuth account to log in as — see run/devauth/config.toml ("main", "alt", …).
       # Authenticate a new account once (see README), then set this to switch to it.
       STASIS_ACCOUNT: "${STASIS_ACCOUNT:-main}"

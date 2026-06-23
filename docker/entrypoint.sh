@@ -19,8 +19,10 @@ export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 # which always opens (silent output) — the game then runs without that error.
 export ALSOFT_DRIVERS="${ALSOFT_DRIVERS:-null}"
 
-# Server the bot auto-joins on launch (quickPlay). Read by build.gradle.
-export STASIS_SERVER="${STASIS_SERVER:-2b2t.org}"
+# Server the bot auto-joins on launch (quickPlay), as host or host:port. Read by
+# build.gradle. Defaults to a local server; the real target is set per-deployment
+# via STASIS_SERVER (our VPS pins it to 2b2t.org in its .env).
+export STASIS_SERVER="${STASIS_SERVER:-127.0.0.1:25565}"
 
 # The committed gradle.properties pins a Windows-only NIO workaround
 # (-Djdk.net.unixdomain.tmpdir=C:/Temp) that is invalid on Linux. Override the
