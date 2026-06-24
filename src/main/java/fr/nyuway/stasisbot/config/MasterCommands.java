@@ -67,6 +67,7 @@ public final class MasterCommands {
 				return set("watch", config.watchedPlayersDisplay());
 			}
 			case "chatlog" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLogAllChat(v); return set("chatlog", on(v)); }
+			case "alert" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAlertOutsiders(v); return set("alert", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
 		}
 	}

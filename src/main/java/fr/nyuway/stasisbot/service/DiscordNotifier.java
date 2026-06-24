@@ -125,8 +125,20 @@ public final class DiscordNotifier {
 		if (!config.discordEventEnabled(event)) return;
 		boolean ping = wantsPing(event, outsider);
 		String body = decorate(event, content, from, to, distance);
-		postInternal(config.discordWebhookUrl(), body, ping, colorFor(event))
+		postInternal(config.discordWebhookUrl(), body, ping, colorFor(event), alertImage(event, outsider))
 				.thenAccept(ok -> { if (!ok) StasisBot.LOGGER.warn("[discord] '{}' POST failed", event.key()); });
+	}
+
+	/**
+	 * The alert GIF to flash in the embed: only for a NON-base-member arriving near the
+	 * bot ({@code PLAYER_ENTER}/{@code PLAYER_CONNECT}), only with embeds on, and only
+	 * when {@code alertOutsiders} is set with a URL configured. {@code null} otherwise.
+	 */
+	private String alertImage(DiscordEvent event, boolean outsider) {
+		if (!outsider || !config.alertOutsiders() || !config.discordUseEmbeds()) return null;
+		if (event != DiscordEvent.PLAYER_ENTER && event != DiscordEvent.PLAYER_CONNECT) return null;
+		String url = config.alertGifUrl();
+		return url.isBlank() ? null : url;
 	}
 
 	/** Resolve the configured {@link PingMode} into an actual ping decision. */
@@ -191,12 +203,16 @@ public final class DiscordNotifier {
 	}
 
 	private CompletableFuture<Boolean> postInternal(String url, String content, boolean ping, int color) {
+		return postInternal(url, content, ping, color, null);
+	}
+
+	private CompletableFuture<Boolean> postInternal(String url, String content, boolean ping, int color, String imageUrl) {
 		final HttpRequest req;
 		try {
 			req = HttpRequest.newBuilder(URI.create(url.trim()))
 					.timeout(Duration.ofSeconds(10))
 					.header("Content-Type", "application/json")
-					.POST(HttpRequest.BodyPublishers.ofString(buildBody(content, ping, color), StandardCharsets.UTF_8))
+					.POST(HttpRequest.BodyPublishers.ofString(buildBody(content, ping, color, imageUrl), StandardCharsets.UTF_8))
 					.build();
 		} catch (RuntimeException e) {
 			StasisBot.LOGGER.warn("[discord] bad webhook URL: {}", e.toString());
@@ -259,7 +275,7 @@ public final class DiscordNotifier {
 	 * only allowed) when we're actually pinging, and it follows the configured
 	 * {@link PingTarget}: {@code @everyone}, {@code @here}, or a custom role.
 	 */
-	private String buildBody(String content, boolean ping, int color) {
+	private String buildBody(String content, boolean ping, int color, String imageUrl) {
 		JsonObject root = new JsonObject();
 		String mention = ping ? mentionText() : "";
 		if (config.discordUseEmbeds()) {
@@ -268,6 +284,11 @@ public final class DiscordNotifier {
 			JsonObject embed = new JsonObject();
 			embed.addProperty("description", content);
 			embed.addProperty("color", color);
+			if (imageUrl != null && !imageUrl.isBlank()) {
+				JsonObject image = new JsonObject();
+				image.addProperty("url", imageUrl.trim());
+				embed.add("image", image);
+			}
 			embeds.add(embed);
 			root.add("embeds", embeds);
 		} else {

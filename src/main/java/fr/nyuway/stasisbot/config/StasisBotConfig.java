@@ -138,6 +138,10 @@ public final class StasisBotConfig {
 	private boolean logAllChat = false;
 	/** Webhook for the general chat relay; falls back to the main webhook when blank. */
 	private String chatWebhookUrl = "";
+	/** Flash a siren GIF in the embed when a NON-base-member enters render distance. */
+	private boolean alertOutsiders = true;
+	/** The alert GIF (embed image) shown for outsider entries. Editable; blank = none. */
+	private String alertGifUrl = "https://media.tenor.com/x_8RZQKq2-QAAAAd/police-siren.gif";
 
 	// --- Discord webhook (opt-in, off by default) ---------------------------
 	/** Master switch for Discord webhook notifications. */
@@ -399,9 +403,14 @@ public final class StasisBotConfig {
 		return (chatWebhookUrl == null || chatWebhookUrl.isBlank()) ? discordWebhookUrl() : chatWebhookUrl.trim();
 	}
 
+	public boolean alertOutsiders() { return alertOutsiders; }
+	public String alertGifUrl() { return alertGifUrl == null ? "" : alertGifUrl.trim(); }
+
 	public void setRequireBaseMemberForHome(boolean v) { this.requireBaseMemberForHome = v; save(); }
 	public void setLogAllChat(boolean v) { this.logAllChat = v; save(); }
 	public void setChatWebhookUrl(String v) { this.chatWebhookUrl = v == null ? "" : v.trim(); save(); }
+	public void setAlertOutsiders(boolean v) { this.alertOutsiders = v; save(); }
+	public void setAlertGifUrl(String v) { this.alertGifUrl = v == null ? "" : v.trim(); save(); }
 
 	/** Add a player to the watch list (lower-cased). Returns true if newly added. */
 	public boolean addWatchedPlayer(String name) {
@@ -514,6 +523,8 @@ public final class StasisBotConfig {
 		this.watchedPlayers = o.watchedPlayers;
 		this.logAllChat = o.logAllChat;
 		this.chatWebhookUrl = o.chatWebhookUrl;
+		this.alertOutsiders = o.alertOutsiders;
+		this.alertGifUrl = o.alertGifUrl;
 		this.lagThresholdMillis = o.lagThresholdMillis;
 		this.arrivalTimeoutMillis = o.arrivalTimeoutMillis;
 		this.master = o.master;
@@ -553,6 +564,7 @@ public final class StasisBotConfig {
 				.distinct()
 				.collect(Collectors.toCollection(ArrayList::new));
 		if (chatWebhookUrl == null) chatWebhookUrl = "";
+		if (alertGifUrl == null) alertGifUrl = "";
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
 		if (maxChamberDistance < 1) maxChamberDistance = 24;
 		if (triggerSearchRadius < 1) triggerSearchRadius = 3;
