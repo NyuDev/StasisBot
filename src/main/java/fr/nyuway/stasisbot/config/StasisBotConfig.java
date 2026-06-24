@@ -142,6 +142,17 @@ public final class StasisBotConfig {
 	private boolean alertOutsiders = true;
 	/** The alert GIF (embed image) shown for outsider entries. Editable; blank = none. */
 	private String alertGifUrl = "https://media.tenor.com/x_8RZQKq2-QAAAAd/police-siren.gif";
+	/** Append 6 random lowercase chars to every outgoing bot chat message (bypasses 2b2t antispam). On by default. */
+	private boolean appendRandomChars = true;
+	/** Per-base-member personal watch lists. Key: lowercase member name. Max 5 targets per member. */
+	private Map<String, MemberWatchEntry> memberWatchlists = new LinkedHashMap<>();
+
+	/** Per-member watch configuration — GSON-serialised as a nested object in the JSON. */
+	public static final class MemberWatchEntry {
+		public List<String> players = new ArrayList<>();
+		/** Delivery mode: {@code "dm"} (bot whispers the watcher in-game) or {@code "discord"} (webhook). */
+		public String output = "dm";
+	}
 
 	// --- Discord webhook (opt-in, off by default) ---------------------------
 	/** Master switch for Discord webhook notifications. */
@@ -405,22 +416,124 @@ public final class StasisBotConfig {
 
 	public boolean alertOutsiders() { return alertOutsiders; }
 	public String alertGifUrl() { return alertGifUrl == null ? "" : alertGifUrl.trim(); }
+	public boolean appendRandomChars() { return appendRandomChars; }
 
 	public void setRequireBaseMemberForHome(boolean v) { this.requireBaseMemberForHome = v; save(); }
 	public void setLogAllChat(boolean v) { this.logAllChat = v; save(); }
 	public void setChatWebhookUrl(String v) { this.chatWebhookUrl = v == null ? "" : v.trim(); save(); }
 	public void setAlertOutsiders(boolean v) { this.alertOutsiders = v; save(); }
 	public void setAlertGifUrl(String v) { this.alertGifUrl = v == null ? "" : v.trim(); save(); }
+	public void setAppendRandomChars(boolean v) { this.appendRandomChars = v; save(); }
 
-	/** Add a player to the watch list (lower-cased). Returns true if newly added. */
+	/** True if {@code name} is a valid Minecraft username ({@code [a-zA-Z0-9_]}, 1–16 chars). */
+	public static boolean isValidMinecraftName(String name) {
+		if (name == null) return false;
+		int len = name.length();
+		if (len < 1 || len > 16) return false;
+		for (int i = 0; i < len; i++) {
+			char c = name.charAt(i);
+			if (!Character.isLetterOrDigit(c) && c != '_') return false;
+		}
+		return true;
+	}
+
+	/** Add a player to the watch list (lower-cased, validated). Returns true if newly added. */
 	public boolean addWatchedPlayer(String name) {
 		if (name == null || name.isBlank()) return false;
+		if (!isValidMinecraftName(name.trim())) return false;
 		if (watchedPlayers == null) watchedPlayers = new ArrayList<>();
 		String n = name.trim().toLowerCase(Locale.ROOT);
 		if (watchedPlayers.contains(n)) return false;
 		watchedPlayers.add(n);
 		save();
 		return true;
+	}
+
+	// --- per-member watch lists -----------------------------------------------
+
+	/**
+	 * All watchers (and their output mode) of a given player, across all member lists.
+	 * Returns a map of {@code watcherName → "dm"|"discord"}.
+	 */
+	public Map<String, String> watchersOf(String target) {
+		Map<String, String> result = new LinkedHashMap<>();
+		if (memberWatchlists == null || target == null) return result;
+		String t = target.toLowerCase(Locale.ROOT);
+		for (Map.Entry<String, MemberWatchEntry> e : memberWatchlists.entrySet()) {
+			MemberWatchEntry entry = e.getValue();
+			if (entry != null && entry.players != null && entry.players.contains(t)) {
+				result.put(e.getKey(), entry.output != null ? entry.output : "dm");
+			}
+		}
+		return result;
+	}
+
+	/** True when this player is on the global OR any member's watch list. */
+	public boolean isAnyWatched(String name) {
+		if (isWatched(name)) return true;
+		if (name == null || memberWatchlists == null) return false;
+		String n = name.toLowerCase(Locale.ROOT);
+		for (MemberWatchEntry e : memberWatchlists.values()) {
+			if (e != null && e.players != null && e.players.contains(n)) return true;
+		}
+		return false;
+	}
+
+	/** Snapshot of a member's watch list; empty when none. */
+	public List<String> memberWatchPlayers(String watcher) {
+		if (watcher == null || memberWatchlists == null) return List.of();
+		MemberWatchEntry e = memberWatchlists.get(watcher.toLowerCase(Locale.ROOT));
+		return e == null || e.players == null ? List.of() : List.copyOf(e.players);
+	}
+
+	/** Delivery mode for a member's watches: {@code "dm"} or {@code "discord"}. */
+	public String memberWatchOutput(String watcher) {
+		if (watcher == null || memberWatchlists == null) return "dm";
+		MemberWatchEntry e = memberWatchlists.get(watcher.toLowerCase(Locale.ROOT));
+		return (e == null || e.output == null) ? "dm" : e.output;
+	}
+
+	/** Update a member's watch output mode. Persists immediately. */
+	public void setMemberWatchOutput(String watcher, String output) {
+		if (watcher == null) return;
+		if (!"dm".equals(output) && !"discord".equals(output)) return;
+		if (memberWatchlists == null) memberWatchlists = new LinkedHashMap<>();
+		memberWatchlists.computeIfAbsent(watcher.toLowerCase(Locale.ROOT), k -> new MemberWatchEntry()).output = output;
+		save();
+	}
+
+	/**
+	 * Add {@code target} to {@code watcher}'s personal watch list (max 5, FIFO drop when full).
+	 * Returns a human-readable status string for the reply.
+	 */
+	public String addMemberWatch(String watcher, String target) {
+		if (!isValidMinecraftName(target)) return "Invalid player name.";
+		if (memberWatchlists == null) memberWatchlists = new LinkedHashMap<>();
+		String key = watcher.toLowerCase(Locale.ROOT);
+		String t = target.toLowerCase(Locale.ROOT);
+		MemberWatchEntry entry = memberWatchlists.computeIfAbsent(key, k -> new MemberWatchEntry());
+		if (entry.players == null) entry.players = new ArrayList<>();
+		if (!entry.players.contains(t)) {
+			if (entry.players.size() >= 5) entry.players.remove(0); // drop oldest when full
+			entry.players.add(t);
+			save();
+		}
+		String mode = entry.output != null ? entry.output : "dm";
+		return "[Watch] Watching: " + String.join(", ", entry.players) + " | mode: " + mode;
+	}
+
+	/** Remove {@code target} from {@code watcher}'s personal watch list. Returns status string. */
+	public String removeMemberWatch(String watcher, String target) {
+		if (watcher == null || target == null || memberWatchlists == null) return "Not found.";
+		MemberWatchEntry entry = memberWatchlists.get(watcher.toLowerCase(Locale.ROOT));
+		if (entry == null || entry.players == null || entry.players.isEmpty()) return "[Watch] Your list is empty.";
+		boolean removed = entry.players.removeIf(p -> p.equalsIgnoreCase(target.trim()));
+		if (removed) save();
+		if (entry.players.isEmpty())
+			return removed ? "[Watch] Removed. List is now empty." : "[Watch] Not in your list.";
+		return removed
+			? "[Watch] Removed. Watching: " + String.join(", ", entry.players)
+			: "[Watch] Not in your list.";
 	}
 
 	/** Remove a player from the watch list. Returns true if it was present. */
@@ -525,6 +638,8 @@ public final class StasisBotConfig {
 		this.chatWebhookUrl = o.chatWebhookUrl;
 		this.alertOutsiders = o.alertOutsiders;
 		this.alertGifUrl = o.alertGifUrl;
+		this.appendRandomChars = o.appendRandomChars;
+		this.memberWatchlists = o.memberWatchlists;
 		this.lagThresholdMillis = o.lagThresholdMillis;
 		this.arrivalTimeoutMillis = o.arrivalTimeoutMillis;
 		this.master = o.master;
@@ -565,6 +680,17 @@ public final class StasisBotConfig {
 				.collect(Collectors.toCollection(ArrayList::new));
 		if (chatWebhookUrl == null) chatWebhookUrl = "";
 		if (alertGifUrl == null) alertGifUrl = "";
+		if (memberWatchlists == null) memberWatchlists = new LinkedHashMap<>();
+		memberWatchlists.forEach((k, e) -> {
+			if (e == null) return;
+			if (e.players == null) e.players = new ArrayList<>();
+			e.players = e.players.stream()
+					.filter(s -> s != null && isValidMinecraftName(s.trim()))
+					.map(s -> s.trim().toLowerCase(Locale.ROOT))
+					.distinct()
+					.collect(Collectors.toCollection(ArrayList::new));
+			if (e.output == null || (!"dm".equals(e.output) && !"discord".equals(e.output))) e.output = "dm";
+		});
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
 		if (maxChamberDistance < 1) maxChamberDistance = 24;
 		if (triggerSearchRadius < 1) triggerSearchRadius = 3;

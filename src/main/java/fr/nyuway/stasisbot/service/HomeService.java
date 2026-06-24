@@ -25,6 +25,7 @@ import net.minecraft.util.math.Vec3d;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -153,7 +154,59 @@ public final class HomeService {
 			client.execute(() -> commands.handle(s, b));
 			return;
 		}
+		if (isMemberWatchCommand(body)) {
+			// Only base members or the master can use watch commands; everyone else is silently ignored.
+			final String s = sender, b = body;
+			client.execute(() -> { if (isBaseMember(s) || config.isMaster(s)) handleMemberWatch(s, b); });
+			return;
+		}
 		if (containsTrigger(body)) onHomeRequest(sender, body, dm);
+	}
+
+	private static boolean isMemberWatchCommand(String body) {
+		if (body == null) return false;
+		String b = body.trim().toLowerCase(Locale.ROOT);
+		return b.equals("!watch") || b.startsWith("!watch ")
+			|| b.equals("!unwatch") || b.startsWith("!unwatch ")
+			|| b.equals("!watching")
+			|| b.equals("!watchmode") || b.startsWith("!watchmode ");
+	}
+
+	/**
+	 * Handle {@code !watch}, {@code !unwatch}, {@code !watching}, {@code !watchmode} for base members.
+	 * Runs on the client thread (already marshalled by the caller).
+	 */
+	private void handleMemberWatch(String sender, String body) {
+		String[] parts = body.trim().split("\\s+");
+		String cmd = parts[0].toLowerCase(Locale.ROOT);
+		switch (cmd) {
+			case "!watch" -> {
+				if (parts.length < 2) { feedback.replyText(sender, "[Watch] Usage: !watch <player>"); return; }
+				feedback.replyText(sender, config.addMemberWatch(sender, parts[1]));
+			}
+			case "!unwatch" -> {
+				if (parts.length < 2) { feedback.replyText(sender, "[Watch] Usage: !unwatch <player>"); return; }
+				feedback.replyText(sender, config.removeMemberWatch(sender, parts[1]));
+			}
+			case "!watching" -> {
+				List<String> list = config.memberWatchPlayers(sender);
+				String mode = config.memberWatchOutput(sender);
+				String reply = list.isEmpty()
+					? "[Watch] Your list is empty. Mode: " + mode
+					: "[Watch] Watching: " + String.join(", ", list) + " | Mode: " + mode;
+				feedback.replyText(sender, reply);
+			}
+			case "!watchmode" -> {
+				if (parts.length < 2) { feedback.replyText(sender, "[Watch] Usage: !watchmode dm|discord"); return; }
+				String mode = parts[1].toLowerCase(Locale.ROOT);
+				if (!"dm".equals(mode) && !"discord".equals(mode)) {
+					feedback.replyText(sender, "[Watch] Mode must be 'dm' or 'discord'.");
+					return;
+				}
+				config.setMemberWatchOutput(sender, mode);
+				feedback.replyText(sender, "[Watch] Output mode set to: " + mode);
+			}
+		}
 	}
 
 	/** A base member is anyone whose name/alias matches a currently detected stasis sign. */

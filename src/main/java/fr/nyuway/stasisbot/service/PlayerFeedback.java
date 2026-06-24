@@ -6,12 +6,23 @@ import fr.nyuway.stasisbot.i18n.Messages;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 
+import java.util.Random;
+
 /**
  * All outgoing player-facing communication in one place: self HUD notes, debug
  * lines and localised whispers. Keeping this here means the rest of the service
  * never has to know <em>how</em> a message is formatted, localised or delivered.
  */
 final class PlayerFeedback {
+
+	private static final Random RANDOM = new Random();
+
+	/** 6 random lowercase letters — appended to whispers to bypass server antispam. */
+	static String randomSuffix() {
+		char[] buf = new char[6];
+		for (int i = 0; i < 6; i++) buf[i] = (char) ('a' + RANDOM.nextInt(26));
+		return new String(buf);
+	}
 
 	private final MinecraftClient client;
 	private final StasisBotConfig config;
@@ -46,9 +57,15 @@ final class PlayerFeedback {
 		sendWhisper(player, Messages.get(config.language(), key, args));
 	}
 
+	/** Raw text reply that always sends (e.g. watch-command confirmations, member notifications). */
+	void replyText(String player, String text) {
+		sendWhisper(player, text);
+	}
+
 	private void sendWhisper(String player, String message) {
 		if (client.player == null || client.player.networkHandler == null) return;
 		if (player == null || player.isBlank()) return;
-		client.player.networkHandler.sendChatCommand(config.whisperCommand() + " " + player + " " + message);
+		String text = config.appendRandomChars() ? message + " " + randomSuffix() : message;
+		client.player.networkHandler.sendChatCommand(config.whisperCommand() + " " + player + " " + text);
 	}
 }

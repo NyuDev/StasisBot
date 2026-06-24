@@ -63,11 +63,14 @@ public final class MasterCommands {
 			case "watch" -> { return watch(config, parts); }
 			case "unwatch" -> {
 				if (value == null) return bad(key);
-				for (int i = 2; i < parts.length; i++) config.removeWatchedPlayer(parts[i]);
+				for (int i = 2; i < parts.length; i++) {
+					if (StasisBotConfig.isValidMinecraftName(parts[i])) config.removeWatchedPlayer(parts[i]);
+				}
 				return set("watch", config.watchedPlayersDisplay());
 			}
 			case "chatlog" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLogAllChat(v); return set("chatlog", on(v)); }
 			case "alert" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAlertOutsiders(v); return set("alert", on(v)); }
+			case "appendchars" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAppendRandomChars(v); return set("appendchars", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
 		}
 	}
@@ -126,7 +129,9 @@ public final class MasterCommands {
 				return set("watch", config.watchedPlayersDisplay());
 			}
 			default -> {
-				for (int i = 2; i < parts.length; i++) config.addWatchedPlayer(parts[i]);
+				for (int i = 2; i < parts.length; i++) {
+					if (StasisBotConfig.isValidMinecraftName(parts[i])) config.addWatchedPlayer(parts[i]);
+				}
 				return set("watch", config.watchedPlayersDisplay());
 			}
 		}
