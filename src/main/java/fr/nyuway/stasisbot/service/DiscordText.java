@@ -65,10 +65,44 @@ final class DiscordText {
 		return head + (fr(lang) ? "\n\u2694 Stuff : " : "\n\u2694 Gear: ") + gear;
 	}
 
-	static String homeRequested(String lang, String name) {
+	static String homeRequested(String lang, String name, String message, boolean dm) {
+		String how = dm ? "DM" : (fr(lang) ? "chat public" : "public chat");
+		String head = fr(lang)
+				? "\uD83C\uDFE0 **" + name + "** a demand\u00e9 une t\u00e9l\u00e9portation (via " + how + ")."
+				: "\uD83C\uDFE0 **" + name + "** requested a teleport home (via " + how + ").";
+		return appendQuote(message, head);
+	}
+
+	/** Append a quoted "\uD83D\uDCAC \u2026" line carrying the original message, if any. */
+	private static String appendQuote(String message, String head) {
+		if (message == null || message.isBlank()) return head;
+		String m = message.strip();
+		if (m.length() > 200) m = m.substring(0, 200) + "\u2026";
+		return head + "\n\uD83D\uDCAC " + m;
+	}
+
+	static String watchedChat(String name, String body, boolean dm) {
+		String b = body == null ? "" : body.strip();
+		if (b.length() > 350) b = b.substring(0, 350) + "\u2026";
+		return "\uD83D\uDC41\uFE0F **" + name + "**" + (dm ? " (DM)" : "") + ": " + b;
+	}
+
+	static String watchedJoin(String lang, String name) {
 		return fr(lang)
-				? "\uD83C\uDFE0 **" + name + "** a demand\u00e9 une t\u00e9l\u00e9portation."
-				: "\uD83C\uDFE0 **" + name + "** requested a teleport home.";
+				? "\uD83D\uDC41\uFE0F\uD83D\uDFE2 **" + name + "** (surveill\u00e9) s'est connect\u00e9 au serveur."
+				: "\uD83D\uDC41\uFE0F\uD83D\uDFE2 **" + name + "** (watched) joined the server.";
+	}
+
+	static String watchedLeave(String lang, String name) {
+		return fr(lang)
+				? "\uD83D\uDC41\uFE0F\u26AB **" + name + "** (surveill\u00e9) s'est d\u00e9connect\u00e9 du serveur."
+				: "\uD83D\uDC41\uFE0F\u26AB **" + name + "** (watched) left the server.";
+	}
+
+	/** One line for the general chat relay: {@code <Name> body} (or a DM marker). */
+	static String chatLine(String name, String body, boolean dm) {
+		String b = body == null ? "" : body.strip();
+		return dm ? (name + " \u2192 DM: " + b) : ("<" + name + "> " + b);
 	}
 
 	static String fired(String lang, String name, String label) {

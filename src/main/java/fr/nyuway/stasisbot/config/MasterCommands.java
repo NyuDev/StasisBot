@@ -59,6 +59,14 @@ public final class MasterCommands {
 			case "whisper" -> { if (value == null) return bad(key); config.setWhisperCommand(value); return set("whisper", config.whisperCommand()); }
 			case "master" -> { if (value == null) return bad(key); config.setMaster(value); return set("master", config.master()); }
 			case "returnpos" -> { return returnPos(config, parts); }
+			case "reqmember" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setRequireBaseMemberForHome(v); return set("reqmember", on(v)); }
+			case "watch" -> { return watch(config, parts); }
+			case "unwatch" -> {
+				if (value == null) return bad(key);
+				for (int i = 2; i < parts.length; i++) config.removeWatchedPlayer(parts[i]);
+				return set("watch", config.watchedPlayersDisplay());
+			}
+			case "chatlog" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLogAllChat(v); return set("chatlog", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
 		}
 	}
@@ -92,6 +100,33 @@ public final class MasterCommands {
 			default -> {
 				config.setTriggerWords(Arrays.asList(parts).subList(2, parts.length));
 				return set("trigger", config.triggerWordsDisplay());
+			}
+		}
+	}
+
+	private static Result watch(StasisBotConfig config, String[] parts) {
+		// "!sb watch"                        → show the watch list
+		// "!sb watch list"                   → show the watch list
+		// "!sb watch add <p> [p2 ...]"       → watch player(s)
+		// "!sb watch remove|del|rm <p> ..."  → unwatch player(s)
+		// "!sb watch <p> [p2 ...]"           → (bare) watch player(s)
+		if (parts.length < 3) return set("watch", config.watchedPlayersDisplay());
+		String sub = parts[2].toLowerCase(Locale.ROOT);
+		switch (sub) {
+			case "list" -> { return set("watch", config.watchedPlayersDisplay()); }
+			case "add" -> {
+				if (parts.length < 4) return bad("watch");
+				for (int i = 3; i < parts.length; i++) config.addWatchedPlayer(parts[i]);
+				return set("watch", config.watchedPlayersDisplay());
+			}
+			case "remove", "del", "rm", "unwatch" -> {
+				if (parts.length < 4) return bad("watch");
+				for (int i = 3; i < parts.length; i++) config.removeWatchedPlayer(parts[i]);
+				return set("watch", config.watchedPlayersDisplay());
+			}
+			default -> {
+				for (int i = 2; i < parts.length; i++) config.addWatchedPlayer(parts[i]);
+				return set("watch", config.watchedPlayersDisplay());
 			}
 		}
 	}

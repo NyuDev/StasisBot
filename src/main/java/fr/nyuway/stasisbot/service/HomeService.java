@@ -146,14 +146,14 @@ public final class HomeService {
 	// --- chat entry points ---------------------------------------------------
 
 	/** Single front door for every chat line (may be called off the client thread). */
-	public void onChatMessage(String sender, String body) {
+	public void onChatMessage(String sender, String body, boolean dm) {
 		if (sender == null || body == null) return;
 		if (MasterCommands.looksLikeCommand(config, body)) {
 			final String s = sender, b = body;
 			client.execute(() -> commands.handle(s, b));
 			return;
 		}
-		if (containsTrigger(body)) onHomeRequest(sender);
+		if (containsTrigger(body)) onHomeRequest(sender, body, dm);
 	}
 
 	/** A base member is anyone whose name/alias matches a currently detected stasis sign. */
@@ -191,19 +191,27 @@ public final class HomeService {
 	}
 
 	/** Entry point from the chat listener (may be invoked off the client thread). */
-	public void onHomeRequest(String senderName) {
+	public void onHomeRequest(String senderName, String message, boolean dm) {
 		if (senderName == null || senderName.isBlank()) return;
 		if (requests.shouldDebounce(senderName)) {
 			StasisBot.LOGGER.info("[home] '{}' debounced (duplicate within window)", senderName);
 			return;
 		}
-		client.execute(() -> enqueue(senderName));
+		client.execute(() -> enqueue(senderName, message, dm));
 	}
 
-	private void enqueue(String senderName) {
+	private void enqueue(String senderName, String message, boolean dm) {
 		ClientPlayerEntity self = client.player;
 		if (self == null) return;
 		if (senderName.equalsIgnoreCase(self.getGameProfile().name())) return; // ignore the bot itself
+		// Only base members may request, and only their requests are logged: a player
+		// whose name/alias is on a detected stasis sign. Stops ordinary chat that merely
+		// contains a trigger word from being processed or announced. Disable with
+		// requireBaseMemberForHome=false.
+		if (config.requireBaseMemberForHome() && !isBaseMember(senderName)) {
+			if (config.debug()) StasisBot.LOGGER.info("[home] '{}' ignored — not a base member", senderName);
+			return;
+		}
 		// Already at the base: don't waste a pearl pulling in someone who's standing in
 		// the bot's render distance. On by default; turn off with skipIfPresent=false.
 		if (config.skipIfPresent() && isInRenderDistance(senderName)) {
@@ -222,7 +230,8 @@ public final class HomeService {
 		}
 		StasisBot.LOGGER.info("[home] '{}' enqueued (queue size {})", senderName, requests.size());
 		feedback.debug("home requested by '" + senderName + "' (queue " + requests.size() + ")");
-		discordPlayer(DiscordEvent.HOME_REQUESTED, senderName, DiscordText.homeRequested(config.language(), senderName));
+		discordPlayer(DiscordEvent.HOME_REQUESTED, senderName,
+				DiscordText.homeRequested(config.language(), senderName, message, dm));
 
 		int ahead = requests.size() - 1 + (phase != Phase.IDLE ? 1 : 0);
 		if (ahead > 0) {

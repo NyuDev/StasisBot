@@ -46,15 +46,16 @@ public final class ChatMessageParser {
 	private static final Set<String> NON_NAMES =
 			Set.of("whispers", "whisper", "tells", "tell", "from", "msg", "pm");
 
-	public record ParsedMessage(String sender, String body) {}
+	/** Parsed line; {@code dm} is true when it came in as a private message/whisper. */
+	public record ParsedMessage(String sender, String body, boolean dm) {}
 
 	private ChatMessageParser() {
 	}
 
-	/** Build a message from an already-verified sender. */
+	/** Build a message from an already-verified sender (the verified chat channel = public). */
 	public static Optional<ParsedMessage> withKnownSender(String sender, String body) {
 		if (sender == null || sender.isBlank() || body == null) return Optional.empty();
-		return Optional.of(new ParsedMessage(sender, body));
+		return Optional.of(new ParsedMessage(sender, body, false));
 	}
 
 	/** Recover the sender from the raw text when the event didn't supply one. */
@@ -62,17 +63,17 @@ public final class ChatMessageParser {
 		if (raw == null) return Optional.empty();
 		String text = raw.trim();
 		// Whispers first — highest priority, and the shapes most likely to be mis-read
-		// by the generic fallback below.
+		// by the generic fallback below. Both whisper shapes are private messages.
 		Matcher w = WHISPER_IN.matcher(text);
-		if (w.matches()) return Optional.of(new ParsedMessage(w.group(1), w.group(2)));
+		if (w.matches()) return Optional.of(new ParsedMessage(w.group(1), w.group(2), true));
 		Matcher a = WHISPER_ARROW.matcher(text);
-		if (a.matches()) return Optional.of(new ParsedMessage(a.group(1), a.group(2)));
+		if (a.matches()) return Optional.of(new ParsedMessage(a.group(1), a.group(2), true));
 		Matcher m = FALLBACK.matcher(text);
 		if (!m.matches()) return Optional.empty();
 		// Guard: don't let the fallback turn a whisper verb into a fake sender when an
 		// unknown DM shape slipped past the patterns above.
 		String sender = m.group(1);
 		if (NON_NAMES.contains(sender.toLowerCase(Locale.ROOT))) return Optional.empty();
-		return Optional.of(new ParsedMessage(sender, m.group(2)));
+		return Optional.of(new ParsedMessage(sender, m.group(2), false));
 	}
 }

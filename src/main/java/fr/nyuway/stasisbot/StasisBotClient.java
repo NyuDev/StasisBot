@@ -21,6 +21,7 @@ import fr.nyuway.stasisbot.service.LagMonitor;
 import fr.nyuway.stasisbot.service.PlayerSessionTracker;
 import fr.nyuway.stasisbot.service.PlayerWatcher;
 import fr.nyuway.stasisbot.service.RenderPresence;
+import fr.nyuway.stasisbot.service.SurveillanceService;
 import fr.nyuway.stasisbot.service.WorldSettleTracker;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -57,8 +58,9 @@ public final class StasisBotClient implements ClientModInitializer {
 		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord, settle);
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
+		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
 
-		new HomeRequestListener(config, homeService).register();
+		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
@@ -71,6 +73,7 @@ public final class StasisBotClient implements ClientModInitializer {
 			playerWatcher.tick();
 			chamberWatcher.tick();
 			entityWatcher.tick();
+			surveillance.tick();
 			while (openMonitor.wasPressed()) {
 				if (c.player != null) {
 					c.setScreen(new StasisMonitorScreen(config, index, pearls, identity));

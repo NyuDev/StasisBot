@@ -99,6 +99,12 @@ public final class StasisBotConfig {
 	private boolean requireOnline = true;
 	/** Don't teleport a player who is already within the bot's render distance (already at base). */
 	private boolean skipIfPresent = true;
+	/**
+	 * Only act on (and only log) home requests from base members — players whose name or
+	 * alias is on a detected stasis sign. Stops ordinary chat that happens to contain a
+	 * trigger word from being processed or announced to Discord.
+	 */
+	private boolean requireBaseMemberForHome = true;
 	/** Treat the server as lagging when client ticks stall beyond this (ms). */
 	private long lagThresholdMillis = 250L;
 	/** How long (ms) to wait for the player to actually appear after firing. */
@@ -121,6 +127,17 @@ public final class StasisBotConfig {
 	private long rememberMillis = 60000L;
 	/** After dying, automatically respawn and walk back to the fixed home position. */
 	private boolean returnHomeOnDeath = true;
+
+	// --- Surveillance (opt-in; the watch list is empty by default) ----------
+	/**
+	 * Players to keep an eye on: their chat lines and their server connects/disconnects
+	 * are logged to Discord. Empty by default; managed with {@code !sb watch add/remove}.
+	 */
+	private List<String> watchedPlayers = new ArrayList<>();
+	/** Forward EVERY server chat line to a Discord webhook (high volume). Off by default. */
+	private boolean logAllChat = false;
+	/** Webhook for the general chat relay; falls back to the main webhook when blank. */
+	private String chatWebhookUrl = "";
 
 	// --- Discord webhook (opt-in, off by default) ---------------------------
 	/** Master switch for Discord webhook notifications. */
@@ -210,6 +227,7 @@ public final class StasisBotConfig {
 	public boolean hasReturnPos() { return returnX != null && returnY != null && returnZ != null; }
 	public boolean requireOnline() { return requireOnline; }
 	public boolean skipIfPresent() { return skipIfPresent; }
+	public boolean requireBaseMemberForHome() { return requireBaseMemberForHome; }
 	public long lagThresholdMillis() { return lagThresholdMillis; }
 	public long arrivalTimeoutMillis() { return arrivalTimeoutMillis; }
 	public String master() { return master; }
@@ -353,6 +371,57 @@ public final class StasisBotConfig {
 		if (aliases.remove(player.trim().toLowerCase()) != null) save();
 	}
 
+	// --- surveillance ---------------------------------------------------------
+
+	/** Lower-cased snapshot of the watch list (never null). */
+	public List<String> watchedPlayers() {
+		return watchedPlayers == null ? List.of() : List.copyOf(watchedPlayers);
+	}
+
+	/** Human-readable watch list for replies/logs. */
+	public String watchedPlayersDisplay() {
+		return (watchedPlayers == null || watchedPlayers.isEmpty()) ? "(none)" : String.join(", ", watchedPlayers);
+	}
+
+	/** Whether {@code name} (case-insensitive) is on the watch list. */
+	public boolean isWatched(String name) {
+		if (name == null || watchedPlayers == null) return false;
+		for (String w : watchedPlayers) {
+			if (w != null && w.equalsIgnoreCase(name.trim())) return true;
+		}
+		return false;
+	}
+
+	public boolean logAllChat() { return logAllChat; }
+
+	/** Webhook for the chat relay; falls back to the main webhook when not set. */
+	public String chatWebhookUrl() {
+		return (chatWebhookUrl == null || chatWebhookUrl.isBlank()) ? discordWebhookUrl() : chatWebhookUrl.trim();
+	}
+
+	public void setRequireBaseMemberForHome(boolean v) { this.requireBaseMemberForHome = v; save(); }
+	public void setLogAllChat(boolean v) { this.logAllChat = v; save(); }
+	public void setChatWebhookUrl(String v) { this.chatWebhookUrl = v == null ? "" : v.trim(); save(); }
+
+	/** Add a player to the watch list (lower-cased). Returns true if newly added. */
+	public boolean addWatchedPlayer(String name) {
+		if (name == null || name.isBlank()) return false;
+		if (watchedPlayers == null) watchedPlayers = new ArrayList<>();
+		String n = name.trim().toLowerCase(Locale.ROOT);
+		if (watchedPlayers.contains(n)) return false;
+		watchedPlayers.add(n);
+		save();
+		return true;
+	}
+
+	/** Remove a player from the watch list. Returns true if it was present. */
+	public boolean removeWatchedPlayer(String name) {
+		if (name == null || watchedPlayers == null) return false;
+		boolean removed = watchedPlayers.removeIf(w -> w.equalsIgnoreCase(name.trim()));
+		if (removed) save();
+		return removed;
+	}
+
 	/** Lower-case, trim, drop blanks and de-duplicate a list of trigger words. */
 	private static List<String> cleanWords(List<String> words) {
 		if (words == null) return new ArrayList<>();
@@ -441,6 +510,10 @@ public final class StasisBotConfig {
 		this.returnZ = o.returnZ;
 		this.requireOnline = o.requireOnline;
 		this.skipIfPresent = o.skipIfPresent;
+		this.requireBaseMemberForHome = o.requireBaseMemberForHome;
+		this.watchedPlayers = o.watchedPlayers;
+		this.logAllChat = o.logAllChat;
+		this.chatWebhookUrl = o.chatWebhookUrl;
 		this.lagThresholdMillis = o.lagThresholdMillis;
 		this.arrivalTimeoutMillis = o.arrivalTimeoutMillis;
 		this.master = o.master;
@@ -474,6 +547,12 @@ public final class StasisBotConfig {
 		triggerWords = cleanWords(triggerWords);
 		if (triggerWords.isEmpty()) triggerWords.addAll(DEFAULT_TRIGGERS);
 		if (aliases == null) aliases = new LinkedHashMap<>();
+		watchedPlayers = (watchedPlayers == null) ? new ArrayList<>() : watchedPlayers.stream()
+				.filter(s -> s != null && !s.isBlank())
+				.map(s -> s.trim().toLowerCase(Locale.ROOT))
+				.distinct()
+				.collect(Collectors.toCollection(ArrayList::new));
+		if (chatWebhookUrl == null) chatWebhookUrl = "";
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
 		if (maxChamberDistance < 1) maxChamberDistance = 24;
 		if (triggerSearchRadius < 1) triggerSearchRadius = 3;

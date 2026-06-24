@@ -176,6 +176,20 @@ public final class DiscordNotifier {
 				.thenAccept(ok -> { if (result != null) result.accept(ok); });
 	}
 
+	/**
+	 * Post a general-chat-relay message to the chat webhook (its own webhook, or the
+	 * main one when unset). Independent of the per-event notifications — works whenever
+	 * {@code logAllChat} is on and a valid webhook is configured. Goes through the same
+	 * serial sender, so relayed lines stay ordered and rate-limit-friendly.
+	 */
+	public void chatLog(String content) {
+		if (!config.logAllChat()) return;
+		String url = config.chatWebhookUrl();
+		if (!isValidWebhook(url)) return;
+		postInternal(url, content, false, GREY)
+				.thenAccept(ok -> { if (!ok) StasisBot.LOGGER.warn("[discord] chat relay POST failed"); });
+	}
+
 	private CompletableFuture<Boolean> postInternal(String url, String content, boolean ping, int color) {
 		final HttpRequest req;
 		try {
