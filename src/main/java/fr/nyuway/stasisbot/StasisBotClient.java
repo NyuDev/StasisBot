@@ -94,7 +94,38 @@ public final class StasisBotClient implements ClientModInitializer {
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
-		ControlHttpServer control = new ControlHttpServer(config);
+		ControlHttpServer control = new ControlHttpServer(config,
+				new fr.nyuway.stasisbot.control.BotIntrospection() {
+					@Override public String chambers() {
+						var world = client.world;
+						var self = client.player;
+						if (world == null || self == null) return "";
+						var list = index.chambers(world, self.getBlockPos());
+						StringBuilder sb = new StringBuilder();
+						for (var c : list) {
+							boolean pearl = pearls.hasOwnPearl(world, c, list);
+							boolean wrong = false;
+							if (pearl) {
+								String owner = pearls.ownPearlThrower(world, c, list);
+								wrong = owner != null && !c.matchesAny(identity.tokensFor(owner));
+							}
+							char st = pearl ? (wrong ? 'w' : '1') : '0';
+							if (sb.length() > 0) sb.append('\n');
+							sb.append(c.label()).append('|')
+								.append(c.trigger().getX()).append(' ').append(c.trigger().getY()).append(' ').append(c.trigger().getZ())
+								.append('|').append(st);
+						}
+						return sb.toString();
+					}
+					@Override public boolean setHome() {
+						var self = client.player;
+						if (self == null) return false;
+						var p = self.getBlockPos();
+						config.setReturnPos(p.getX(), p.getY(), p.getZ());
+						return true;
+					}
+					@Override public void rescan() { index.invalidate(); }
+				});
 
 		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();

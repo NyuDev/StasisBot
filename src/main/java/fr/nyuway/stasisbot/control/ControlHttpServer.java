@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Bot-side control endpoint: a tiny HTTP server (JDK built-in, no deps) that accepts
@@ -28,12 +29,18 @@ public final class ControlHttpServer {
 	private final StasisBotConfig config;
 	private final ControlProtocol proto;
 	private final int port;
+	private final BotIntrospection intro; // null when no live world info is available
 	private HttpServer server;
 
 	public ControlHttpServer(StasisBotConfig config) {
+		this(config, null);
+	}
+
+	public ControlHttpServer(StasisBotConfig config, BotIntrospection intro) {
 		this.config = config;
 		this.proto = new ControlProtocol(config.controlSecret());
 		this.port = config.controlPort();
+		this.intro = intro;
 	}
 
 	public void start() {
@@ -94,8 +101,21 @@ public final class ControlHttpServer {
 				return new String[]{"STATE", ControlCore.snapshot(config)};
 			}
 			case "SET" -> {
-				boolean ok = applyOnClientThread(payload);
+				boolean ok = onClientThread(() -> ControlCore.applySet(config, payload), false);
 				return ok ? new String[]{"STATE", ControlCore.snapshot(config)} : new String[]{"ERR", payload};
+			}
+			case "CHAMBERS" -> {
+				if (intro == null) return new String[]{"CHAMBERS", ""};
+				return new String[]{"CHAMBERS", onClientThread(intro::chambers, "")};
+			}
+			case "SETHOME" -> {
+				if (intro == null) return new String[]{"ERR", "sethome"};
+				boolean ok = onClientThread(intro::setHome, false);
+				return ok ? new String[]{"OK", "home set"} : new String[]{"ERR", "sethome"};
+			}
+			case "RESCAN" -> {
+				if (intro != null) onClientThread(() -> { intro.rescan(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "rescan"};
 			}
 			case "PING" -> {
 				return new String[]{"PONG", payload == null ? "" : payload};
@@ -106,18 +126,18 @@ public final class ControlHttpServer {
 		}
 	}
 
-	/** Apply a SET on the client thread (where the bot reads config), waiting briefly for the result. */
-	private boolean applyOnClientThread(String payload) {
+	/** Run a task on the client thread (where the bot reads world/config), waiting briefly for the result. */
+	private <T> T onClientThread(Supplier<T> task, T fallback) {
 		MinecraftClient client = MinecraftClient.getInstance();
-		CompletableFuture<Boolean> fut = new CompletableFuture<>();
+		CompletableFuture<T> fut = new CompletableFuture<>();
 		client.execute(() -> {
-			try { fut.complete(ControlCore.applySet(config, payload)); }
-			catch (Throwable t) { fut.complete(false); }
+			try { fut.complete(task.get()); }
+			catch (Throwable t) { fut.complete(fallback); }
 		});
 		try {
 			return fut.get(5, TimeUnit.SECONDS);
 		} catch (Exception e) {
-			return false;
+			return fallback;
 		}
 	}
 

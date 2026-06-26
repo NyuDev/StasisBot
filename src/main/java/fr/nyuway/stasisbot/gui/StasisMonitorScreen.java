@@ -54,10 +54,12 @@ public final class StasisMonitorScreen extends Screen {
 
 	private String lastSignature = "";
 	private long lastRefresh = 0L;
+	private long lastChamberFetch = 0L;
 	private ButtonWidget homeButton;
 
 	// Controller-mode widgets, kept for live updates without a rebuild (so fields keep focus).
 	private final Map<String, ButtonWidget> toggleButtons = new LinkedHashMap<>();
+	private final List<ButtonWidget> remoteGated = new ArrayList<>();
 	private ButtonWidget langButton;
 	private ButtonWidget movementButton;
 	private TextFieldWidget endpointField;
@@ -90,6 +92,7 @@ public final class StasisMonitorScreen extends Screen {
 	@Override
 	protected void init() {
 		toggleButtons.clear();
+		remoteGated.clear();
 		buildToggles();
 		if (remote()) {
 			buildConnectionPanel();
@@ -104,6 +107,11 @@ public final class StasisMonitorScreen extends Screen {
 	public void tick() {
 		if (remote()) {
 			refreshRemoteLabels();
+			long now = System.currentTimeMillis();
+			if (synced() && now - lastChamberFetch > 3000L) {
+				lastChamberFetch = now;
+				remote.requestChambers(); // keep the chamber list live
+			}
 			return;
 		}
 		if (homeButton != null) homeButton.setMessage(setHomeLabel());
@@ -206,24 +214,39 @@ public final class StasisMonitorScreen extends Screen {
 				.dimensions(x, y, bw, bh).build());
 		y += step;
 
-		if (remote()) {
-			addDrawableChild(ButtonWidget.builder(Text.literal("Refresh from bot"), b -> remote.refresh())
-					.dimensions(x, y, bw, bh).build());
-		} else {
-			homeButton = ButtonWidget.builder(setHomeLabel(), b -> {
-				if (client != null && client.player != null) {
-					var p = client.player.getBlockPos();
-					config.setReturnPos(p.getX(), p.getY(), p.getZ());
-					b.setMessage(setHomeLabel());
-				}
-			}).dimensions(x, y, bw, bh).build();
-			addDrawableChild(homeButton);
-			y += step;
-			addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> {
+		// Set home here: bot mode pins the local position; controller mode asks the bot to pin its own.
+		homeButton = ButtonWidget.builder(setHomeLabel(), b -> {
+			if (remote()) {
+				remote.setHome();
+			} else if (client != null && client.player != null) {
+				var p = client.player.getBlockPos();
+				config.setReturnPos(p.getX(), p.getY(), p.getZ());
+			}
+			b.setMessage(setHomeLabel());
+		}).dimensions(x, y, bw, bh).build();
+		if (remote()) remoteGated.add(homeButton);
+		addDrawableChild(homeButton);
+		y += step;
+
+		// Rescan: bot mode re-indexes locally; controller mode asks the bot to re-scan.
+		ButtonWidget rescan = ButtonWidget.builder(Text.literal("Rescan"), b -> {
+			if (remote()) {
+				remote.rescan();
+			} else {
 				if (index != null) index.invalidate();
 				clearChildren();
 				init();
-			}).dimensions(x, y, bw, bh).build());
+			}
+		}).dimensions(x, y, bw, bh).build();
+		if (remote()) remoteGated.add(rescan);
+		addDrawableChild(rescan);
+		y += step;
+
+		if (remote()) {
+			ButtonWidget refresh = ButtonWidget.builder(Text.literal("Refresh from bot"), b -> remote.refresh())
+					.dimensions(x, y, bw, bh).build();
+			remoteGated.add(refresh);
+			addDrawableChild(refresh);
 		}
 	}
 
@@ -313,9 +336,11 @@ public final class StasisMonitorScreen extends Screen {
 			langButton.setMessage(synced ? langLabel() : Text.literal("Language: §7?"));
 			langButton.active = synced;
 		}
+		for (ButtonWidget b : remoteGated) b.active = synced;
 	}
 
 	private Text setHomeLabel() {
+		if (remote()) return Text.literal("§bSet home here");
 		return Text.literal(standingOnHome() ? "§aSet home here §a✔" : "§bSet home here");
 	}
 
@@ -400,6 +425,27 @@ public final class StasisMonitorScreen extends Screen {
 				width - 170, 16, 0xFFFFFF);
 
 		if (remote()) {
+			// The bot's detected chambers, below the connection panel.
+			int cy = 138;
+			ctx.drawTextWithShadow(textRenderer,
+					Text.literal("Detected chambers (remote)").formatted(Formatting.AQUA), 20, cy, 0xFFFFFF);
+			cy += 13;
+			var chs = remote.chambers();
+			if (chs.isEmpty()) {
+				ctx.drawTextWithShadow(textRenderer,
+						Text.literal(synced() ? "§7(none — bot not parked at the base?)" : "§7(connect to see them)"),
+						20, cy, 0xAAAAAA);
+			} else {
+				int maxRows = Math.max(0, (height - cy - 34) / 11);
+				for (int i = 0; i < Math.min(chs.size(), maxRows); i++) {
+					var c = chs.get(i);
+					String dot = c.state() == '0' ? "§c○" : (c.state() == 'w' ? "§6●" : "§a●");
+					ctx.drawTextWithShadow(textRenderer,
+							Text.literal(dot + " §f" + c.label() + " §7" + c.pos()), 20, cy, 0xFFFFFF);
+					cy += 11;
+				}
+			}
+
 			String dot = switch (remote.status()) {
 				case SYNCED -> "§a● synced";
 				case CONNECTING -> "§e● connecting…";

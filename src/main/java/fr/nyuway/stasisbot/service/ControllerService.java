@@ -9,7 +9,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -38,8 +40,12 @@ public final class ControllerService {
 
 	private volatile ControlProtocol proto;
 	private final Map<String, String> state = new LinkedHashMap<>();
+	private volatile List<RemoteChamber> chambers = new ArrayList<>();
 	private volatile Status status = Status.IDLE;
 	private volatile String info = "";
+
+	/** One chamber the remote bot detects: its sign label, position text, and pearl state. */
+	public record RemoteChamber(String label, String pos, char state) {}
 
 	public ControllerService(StasisBotConfig config) {
 		this.config = config;
@@ -66,6 +72,11 @@ public final class ControllerService {
 		return state.getOrDefault(key, def);
 	}
 
+	/** The remote bot's detected chambers from the last fetch (never null). */
+	public List<RemoteChamber> chambers() {
+		return chambers;
+	}
+
 	private boolean ready() {
 		return proto != null && proto.isReady() && !config.controlEndpoint().isBlank();
 	}
@@ -81,12 +92,14 @@ public final class ControllerService {
 		status = Status.CONNECTING;
 		info = "Connecting to " + config.controlEndpoint() + " …";
 		request("HELLO", "");
+		request("CHAMBERS", "");
 	}
 
 	public void disconnect() {
 		status = Status.IDLE;
 		info = "disconnected";
 		state.clear();
+		chambers = new ArrayList<>();
 	}
 
 	public void set(String key, String value) {
@@ -95,7 +108,26 @@ public final class ControllerService {
 	}
 
 	public void refresh() {
-		if (ready()) request("GET", "");
+		if (!ready()) return;
+		request("GET", "");
+		request("CHAMBERS", "");
+	}
+
+	/** Ask the bot for its detected chambers (used for the live list). */
+	public void requestChambers() {
+		if (ready()) request("CHAMBERS", "");
+	}
+
+	/** Tell the bot to pin its current position as home. */
+	public void setHome() {
+		if (ready()) request("SETHOME", "");
+	}
+
+	/** Tell the bot to re-scan, then refresh the chamber list. */
+	public void rescan() {
+		if (!ready()) return;
+		request("RESCAN", "");
+		request("CHAMBERS", "");
 	}
 
 	/** Fire one encrypted request off the render thread and fold the reply into the state. */
@@ -127,11 +159,25 @@ public final class ControllerService {
 	private void onFrame(String type, String payload) {
 		switch (type) {
 			case "STATE" -> { parseState(payload); status = Status.SYNCED; info = "synced"; }
+			case "CHAMBERS" -> { parseChambers(payload); status = Status.SYNCED; }
 			case "OK" -> info = "applied: " + payload;
 			case "ERR" -> info = "bot rejected: " + payload;
 			case "PONG" -> info = "pong";
 			default -> { }
 		}
+	}
+
+	private void parseChambers(String payload) {
+		List<RemoteChamber> list = new ArrayList<>();
+		if (payload != null && !payload.isBlank()) {
+			for (String line : payload.split("\n")) {
+				String[] f = line.split("\\|", 3);
+				if (f.length == 3 && !f[2].isEmpty()) {
+					list.add(new RemoteChamber(f[0], f[1], f[2].charAt(0)));
+				}
+			}
+		}
+		chambers = list;
 	}
 
 	private void parseState(String payload) {
