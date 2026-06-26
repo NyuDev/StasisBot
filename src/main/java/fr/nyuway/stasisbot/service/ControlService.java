@@ -5,6 +5,7 @@ import fr.nyuway.stasisbot.chat.ChatMessageParser;
 import fr.nyuway.stasisbot.config.MasterCommands;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.control.ControlChannel;
+import fr.nyuway.stasisbot.control.ControlInbox;
 import fr.nyuway.stasisbot.control.ControlProtocol;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.MinecraftClient;
@@ -40,6 +41,9 @@ public final class ControlService {
 	}
 
 	public void register() {
+		// Primary, cancel-proof receive path: a packet-level mixin feeds raw lines here.
+		ControlInbox.setSink(this::handleRaw);
+		// Also keep the Fabric events as a fallback (deduped by message id downstream).
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
 			if (!overlay) handleRaw(message.getString());
 		});
