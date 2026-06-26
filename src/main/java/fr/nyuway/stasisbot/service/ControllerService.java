@@ -40,7 +40,7 @@ public final class ControllerService {
 	/** Rebuild the crypto from the current secret (call after the secret changes in the GUI). */
 	public void rebuild() {
 		this.proto = new ControlProtocol(config.controlSecret());
-		this.channel = new ControlChannel(proto, this::sendLine, this::onFrame);
+		this.channel = new ControlChannel(proto, this::sendLine, this::onFrame, "controller");
 	}
 
 	public void register() {
@@ -106,7 +106,12 @@ public final class ControllerService {
 		String sender = parsed.get().sender();
 		String body = parsed.get().body();
 		if (!ControlProtocol.isControlLine(body)) return;
-		if (sender == null || !sender.equalsIgnoreCase(config.controlBotName())) return;
+		if (sender == null || !sender.equalsIgnoreCase(config.controlBotName())) {
+			StasisBot.LOGGER.warn("[control/controller] saw control line from '{}' but expected bot '{}'",
+					sender, config.controlBotName());
+			return;
+		}
+		StasisBot.LOGGER.info("[control/controller] rx control whisper from bot '{}'", sender);
 		channel.onLine(body);
 	}
 
@@ -143,9 +148,13 @@ public final class ControllerService {
 	}
 
 	private void sendLine(String line) {
-		if (client.player == null || client.player.networkHandler == null) return;
+		if (client.player == null || client.player.networkHandler == null) {
+			StasisBot.LOGGER.warn("[control/controller] cannot send — not connected to a server");
+			return;
+		}
 		String target = config.controlBotName();
 		if (target == null || target.isBlank()) return;
+		StasisBot.LOGGER.info("[control/controller] sending via /{} to {}", config.whisperCommand(), target);
 		client.player.networkHandler.sendChatCommand(config.whisperCommand() + " " + target + " " + line);
 	}
 }

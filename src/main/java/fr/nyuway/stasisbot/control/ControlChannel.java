@@ -1,5 +1,7 @@
 package fr.nyuway.stasisbot.control;
 
+import fr.nyuway.stasisbot.StasisBot;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -40,6 +42,7 @@ public final class ControlChannel {
 	private final ControlProtocol proto;
 	private final Consumer<String> sink;              // sends exactly one whisper line
 	private final BiConsumer<String, String> handler; // (type, payload) of accepted frames
+	private final String tag;                          // "bot" / "controller" — for diagnostic logs
 
 	private final Deque<String> outbound = new ArrayDeque<>();
 	private long lastSend = 0L;
@@ -48,9 +51,14 @@ public final class ControlChannel {
 	private final Set<String> seen = new LinkedHashSet<>();
 
 	public ControlChannel(ControlProtocol proto, Consumer<String> sink, BiConsumer<String, String> handler) {
+		this(proto, sink, handler, "ctl");
+	}
+
+	public ControlChannel(ControlProtocol proto, Consumer<String> sink, BiConsumer<String, String> handler, String tag) {
 		this.proto = proto;
 		this.sink = sink;
 		this.handler = handler;
+		this.tag = tag;
 	}
 
 	public boolean isReady() { return proto.isReady(); }
@@ -58,7 +66,9 @@ public final class ControlChannel {
 	/** Queue a (type, payload) message for sending (encrypted + chunked). */
 	public void send(String type, String payload) {
 		if (!proto.isReady()) return;
-		outbound.addAll(proto.encode(type, payload));
+		java.util.List<String> lines = proto.encode(type, payload);
+		outbound.addAll(lines);
+		StasisBot.LOGGER.info("[control/{}] queued {} ({} chunk(s)) for send", tag, type, lines.size());
 	}
 
 	/** Feed every incoming whisper body; non-control lines are ignored. */
@@ -66,7 +76,10 @@ public final class ControlChannel {
 		Optional<ControlProtocol.Chunk> oc = ControlProtocol.parseChunk(body);
 		if (oc.isEmpty()) return;
 		ControlProtocol.Chunk c = oc.get();
-		if (c.total() <= 0 || c.total() > MAX_PARTS || c.part() < 0 || c.part() >= c.total()) return;
+		if (c.total() <= 0 || c.total() > MAX_PARTS || c.part() < 0 || c.part() >= c.total()) {
+			StasisBot.LOGGER.warn("[control/{}] bad chunk header part={}/{}", tag, c.part(), c.total());
+			return;
+		}
 		if (seen.contains(c.id())) return; // already delivered — ignore stragglers/replays
 
 		Partial p = partials.computeIfAbsent(c.id(), k -> new Partial(c.total()));
@@ -81,8 +94,18 @@ public final class ControlChannel {
 		StringBuilder b64 = new StringBuilder();
 		for (String part : p.parts) b64.append(part);
 		Optional<ControlProtocol.Frame> f = proto.decode(b64.toString());
-		if (f.isEmpty()) return;                       // wrong secret / tampered
-		if (!proto.inWindow(f.get().timestamp())) return; // stale / replayed
+		if (f.isEmpty()) {                       // wrong secret / tampered / corrupted
+			StasisBot.LOGGER.warn("[control/{}] rx id={} DECODE FAILED (wrong secret or corrupted, {} b64 chars)",
+					tag, c.id(), b64.length());
+			return;
+		}
+		if (!proto.inWindow(f.get().timestamp())) { // stale / replayed
+			long skew = System.currentTimeMillis() - f.get().timestamp();
+			StasisBot.LOGGER.warn("[control/{}] rx id={} type={} REJECTED out-of-window (skew={}ms)",
+					tag, c.id(), f.get().type(), skew);
+			return;
+		}
+		StasisBot.LOGGER.info("[control/{}] rx id={} type={} delivered", tag, c.id(), f.get().type());
 		handler.accept(f.get().type(), f.get().payload());
 	}
 
@@ -92,7 +115,9 @@ public final class ControlChannel {
 		partials.values().removeIf(p -> now - p.lastTouch > PARTIAL_TTL_MILLIS);
 		if (outbound.isEmpty()) return;
 		if (now - lastSend < SEND_INTERVAL_MILLIS) return;
-		sink.accept(outbound.pollFirst());
+		String line = outbound.pollFirst();
+		StasisBot.LOGGER.info("[control/{}] tx whisper ({} chars)", tag, line.length());
+		sink.accept(line);
 		lastSend = now;
 	}
 

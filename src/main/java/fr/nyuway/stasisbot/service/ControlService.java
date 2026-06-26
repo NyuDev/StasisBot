@@ -31,7 +31,7 @@ public final class ControlService {
 		this.client = client;
 		this.config = config;
 		this.proto = new ControlProtocol(config.controlSecret());
-		this.channel = new ControlChannel(proto, this::sendLine, this::onFrame);
+		this.channel = new ControlChannel(proto, this::sendLine, this::onFrame, "bot");
 	}
 
 	/** Remote control is live only with both a secret and a master configured. */
@@ -60,7 +60,11 @@ public final class ControlService {
 		String body = parsed.get().body();
 		if (!ControlProtocol.isControlLine(body)) return;
 		// Defence in depth: only the configured master may drive the bot, on top of the secret.
-		if (sender == null || !sender.equalsIgnoreCase(config.master())) return;
+		if (sender == null || !sender.equalsIgnoreCase(config.master())) {
+			StasisBot.LOGGER.warn("[control/bot] ignored control line from '{}' (master is '{}')", sender, config.master());
+			return;
+		}
+		StasisBot.LOGGER.info("[control/bot] rx control whisper from master '{}'", sender);
 		peer = sender;
 		channel.onLine(body);
 	}
@@ -132,9 +136,13 @@ public final class ControlService {
 	}
 
 	private void sendLine(String line) {
-		if (client.player == null || client.player.networkHandler == null) return;
+		if (client.player == null || client.player.networkHandler == null) {
+			StasisBot.LOGGER.warn("[control/bot] cannot send reply — no player/network yet");
+			return;
+		}
 		String target = peer != null ? peer : config.master();
 		if (target == null || target.isBlank()) return;
+		StasisBot.LOGGER.info("[control/bot] sending reply via /{} to {}", config.whisperCommand(), target);
 		client.player.networkHandler.sendChatCommand(config.whisperCommand() + " " + target + " " + line);
 	}
 }
