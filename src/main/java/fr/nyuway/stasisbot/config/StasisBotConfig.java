@@ -154,6 +154,23 @@ public final class StasisBotConfig {
 		public String output = "dm";
 	}
 
+	// --- Remote control channel (opt-in, end-to-end encrypted over /msg) -----
+	/**
+	 * Run this instance as a remote <em>controller</em> (an in-game GUI that drives a
+	 * headless bot) instead of as the bot itself. The bot and the controller talk over
+	 * an encrypted channel carried inside ordinary whispers — no open ports. Default
+	 * false (= act as the bot). Set true on your own client to pilot the server bot.
+	 */
+	private boolean controllerMode = false;
+	/**
+	 * Pre-shared secret for the encrypted control channel. Must be identical on the bot
+	 * and on the controller. Blank disables remote control entirely (secure default).
+	 * The secret is the key — keep it private; it never travels over the wire.
+	 */
+	private String controlSecret = "";
+	/** Controller only: the bot account's in-game name, so the controller knows who to whisper. */
+	private String controlBotName = "";
+
 	// --- Discord webhook (opt-in, off by default) ---------------------------
 	/** Master switch for Discord webhook notifications. */
 	private boolean discordEnabled = false;
@@ -243,6 +260,9 @@ public final class StasisBotConfig {
 	public boolean requireOnline() { return requireOnline; }
 	public boolean skipIfPresent() { return skipIfPresent; }
 	public boolean requireBaseMemberForHome() { return requireBaseMemberForHome; }
+	public boolean controllerMode() { return controllerMode; }
+	public String controlSecret() { return controlSecret == null ? "" : controlSecret.trim(); }
+	public String controlBotName() { return controlBotName == null ? "" : controlBotName.trim(); }
 	public long lagThresholdMillis() { return lagThresholdMillis; }
 	public long arrivalTimeoutMillis() { return arrivalTimeoutMillis; }
 	public String master() { return master; }
@@ -282,7 +302,11 @@ public final class StasisBotConfig {
 	public void setReturnHome(boolean v) { this.returnHome = v; save(); }
 	public void setAutoWalk(boolean v) { this.autoWalk = v; save(); }
 	public void setRequireOnline(boolean v) { this.requireOnline = v; save(); }
+	public void setSkipIfPresent(boolean v) { this.skipIfPresent = v; save(); }
 	public void setDmFeedback(boolean v) { this.dmFeedback = v; save(); }
+	public void setControllerMode(boolean v) { this.controllerMode = v; save(); }
+	public void setControlSecret(String v) { this.controlSecret = v == null ? "" : v.trim(); save(); }
+	public void setControlBotName(String v) { this.controlBotName = v == null ? "" : v.trim(); save(); }
 	public void setWhisperCommand(String v) { if (v != null && !v.isBlank()) { this.whisperCommand = v.trim(); save(); } }
 
 	/** Replace the whole trigger-word list (cleaned; falls back to the presets if empty). */
@@ -633,6 +657,9 @@ public final class StasisBotConfig {
 		this.requireOnline = o.requireOnline;
 		this.skipIfPresent = o.skipIfPresent;
 		this.requireBaseMemberForHome = o.requireBaseMemberForHome;
+		this.controllerMode = o.controllerMode;
+		this.controlSecret = o.controlSecret;
+		this.controlBotName = o.controlBotName;
 		this.watchedPlayers = o.watchedPlayers;
 		this.logAllChat = o.logAllChat;
 		this.chatWebhookUrl = o.chatWebhookUrl;
@@ -680,6 +707,8 @@ public final class StasisBotConfig {
 				.collect(Collectors.toCollection(ArrayList::new));
 		if (chatWebhookUrl == null) chatWebhookUrl = "";
 		if (alertGifUrl == null) alertGifUrl = "";
+		if (controlSecret == null) controlSecret = "";
+		if (controlBotName == null) controlBotName = "";
 		if (memberWatchlists == null) memberWatchlists = new LinkedHashMap<>();
 		memberWatchlists.forEach((k, e) -> {
 			if (e == null) return;

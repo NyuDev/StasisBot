@@ -76,7 +76,7 @@ public final class StasisMonitorScreen extends Screen {
 		int bw = 150;
 		int x = width - bw - 20;
 		int top = 28;
-		int count = 14;
+		int count = 15;
 		// Fit every control between the header and the bottom status line.
 		int avail = height - top - 34;
 		int step = Math.max(15, Math.min(22, avail / count));
@@ -96,6 +96,10 @@ public final class StasisMonitorScreen extends Screen {
 			config.setLanguage(config.language().equals("fr") ? "en" : "fr");
 			b.setMessage(langLabel());
 		}).dimensions(x, y += step, bw, bh).build());
+
+		addDrawableChild(ButtonWidget.builder(controllerModeLabel(),
+				b -> { config.setControllerMode(!config.controllerMode()); b.setMessage(controllerModeLabel()); })
+				.dimensions(x, y += step, bw, bh).build());
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bManage mappings…"),
 				b -> { if (client != null) client.setScreen(new AliasListScreen(this, config)); })
@@ -233,6 +237,10 @@ public final class StasisMonitorScreen extends Screen {
 
 	private Text langLabel() {
 		return Text.literal("Language: " + config.language().toUpperCase());
+	}
+
+	private Text controllerModeLabel() {
+		return Text.literal("Controller mode: " + (config.controllerMode() ? "§aON §7(relaunch)" : "§cOFF"));
 	}
 
 	@Override

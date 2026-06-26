@@ -11,6 +11,7 @@ Built to run **24/7 headless in Docker** (or as a normal client mod).
 - **Auto-connect & auto-reconnect** to 2b2t — survives queue drops, kicks and restarts.
 - **Discord webhook** notifications: home requests, stasis fired/recharged, players entering render, crystals/TNT, bot death, …
 - **Hot-reloaded config** — edit the JSON, changes apply in ~1s, no restart.
+- **Remote control from in-game** — run a second copy of the mod in *controller mode* to drive the headless bot's settings live from a GUI, over an **end-to-end-encrypted channel that rides on `/msg`** (no open ports).
 - Won't re-teleport someone already standing at the base.
 
 ## Deploy with Docker (recommended)
@@ -58,6 +59,21 @@ Created on first run with sensible defaults. The main keys:
 | `discordEnabled` + `discordWebhookUrl` | `false` | Discord notifications |
 
 The file lists every key (~40); just edit and save.
+
+## Remote control (controller mode)
+
+Configure the headless bot live from your own client — no open ports, nothing readable by the server. The **same mod** runs as the bot or as a *controller*; control frames are **AES-256-GCM encrypted with a shared secret** and travel as ordinary whispers between the two accounts, so even the server only ever sees ciphertext (your coordinates never leak).
+
+**On the bot** (`run/config/stasisbot.json`): set a `master` (your in-game name) and a `controlSecret`. Both must be set, or remote control stays off.
+
+```json
+"master": "YourName",
+"controlSecret": "a-long-random-shared-secret"
+```
+
+**On your client:** install the mod, open the panel (default key **H**) → **Controller mode** ON → relaunch. Now H opens the remote panel: enter the **bot's in-game name** and the **same secret**, hit **Save & Connect**. Once it shows `● synced`, every toggle drives the bot live. Both accounts must be online on the server at the same time.
+
+> Security: the secret is the key — it is never transmitted. Frames are authenticated (only a holder of the secret can issue commands) and replay-guarded (timestamp window). On top of that, the bot only accepts control from the configured `master`.
 
 **Choosing the Minecraft version:** the Docker image is pinned to **1.21.11** (the verified version) via `gradle.properties` — that's what the bot runs. For the downloadable jar, pick the one matching your MC version. To build another version yourself: `./gradlew build -Pminecraft_version=1.21.x -Pyarn_mappings=… -Pfabric_version=…`.
 

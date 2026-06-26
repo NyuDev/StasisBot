@@ -6,10 +6,13 @@ import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.entity.PearlDetector;
 import fr.nyuway.stasisbot.gui.StasisMonitorScreen;
 import fr.nyuway.stasisbot.identity.IdentityResolver;
+import fr.nyuway.stasisbot.gui.ControllerScreen;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
 import fr.nyuway.stasisbot.scan.ChamberScanner;
 import fr.nyuway.stasisbot.service.AutoReconnect;
 import fr.nyuway.stasisbot.service.ConfigWatcher;
+import fr.nyuway.stasisbot.service.ControlService;
+import fr.nyuway.stasisbot.service.ControllerService;
 import fr.nyuway.stasisbot.service.BotDeathInfo;
 import fr.nyuway.stasisbot.service.BotActivity;
 import fr.nyuway.stasisbot.service.ChamberWatcher;
@@ -31,14 +34,48 @@ import net.minecraft.client.option.KeyBinding;
 /**
  * Client entry point. Builds the object graph (constructor injection — no static
  * singletons) and wires the chat listener and keybind to it.
+ *
+ * <p>The same mod runs in two modes: as the <b>bot</b> (default — detects chambers,
+ * serves home requests, watches the base) or as a <b>controller</b> (an in-game GUI
+ * that drives a headless bot over the encrypted control channel). The mode is the
+ * config flag {@code controllerMode}, overridable at launch with {@code STASIS_MODE}.
  */
 public final class StasisBotClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
 		MinecraftClient client = MinecraftClient.getInstance();
-
 		StasisBotConfig config = StasisBotConfig.load();
+
+		// Mode select: config flag, with an env override for headless/Docker convenience.
+		String envMode = System.getenv("STASIS_MODE");
+		boolean controller = config.controllerMode();
+		if (envMode != null && !envMode.isBlank()) controller = envMode.trim().equalsIgnoreCase("controller");
+
+		if (controller) {
+			initController(client, config);
+		} else {
+			initBot(client, config);
+		}
+	}
+
+	/** Controller mode: no bot services — just the remote panel and its channel. */
+	private void initController(MinecraftClient client, StasisBotConfig config) {
+		ControllerService controllerSvc = new ControllerService(client, config);
+		controllerSvc.register();
+
+		KeyBinding openPanel = KeyBindings.registerOpenMonitor();
+		ClientTickEvents.END_CLIENT_TICK.register(c -> {
+			controllerSvc.tick();
+			while (openPanel.wasPressed()) {
+				if (c.player != null) c.setScreen(new ControllerScreen(config, controllerSvc));
+			}
+		});
+		StasisBot.LOGGER.info("StasisBot CONTROLLER mode — press the keybind to open the remote panel");
+	}
+
+	/** Bot mode: the full home-bot graph plus the (opt-in) control endpoint. */
+	private void initBot(MinecraftClient client, StasisBotConfig config) {
 		ChamberIndex index = new ChamberIndex(new ChamberScanner(config), config);
 		PearlDetector pearls = new PearlDetector(config);
 		IdentityResolver identity = new IdentityResolver(config);
@@ -59,9 +96,11 @@ public final class StasisBotClient implements ClientModInitializer {
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
+		ControlService control = new ControlService(client, config);
 
 		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();
+		control.register();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
@@ -74,6 +113,7 @@ public final class StasisBotClient implements ClientModInitializer {
 			chamberWatcher.tick();
 			entityWatcher.tick();
 			surveillance.tick();
+			control.tick();
 			while (openMonitor.wasPressed()) {
 				if (c.player != null) {
 					c.setScreen(new StasisMonitorScreen(config, index, pearls, identity));

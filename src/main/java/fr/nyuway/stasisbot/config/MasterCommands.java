@@ -71,6 +71,12 @@ public final class MasterCommands {
 			case "chatlog" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLogAllChat(v); return set("chatlog", on(v)); }
 			case "alert" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAlertOutsiders(v); return set("alert", on(v)); }
 			case "appendchars" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setAppendRandomChars(v); return set("appendchars", on(v)); }
+			case "death" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setReturnHomeOnDeath(v); return set("death", on(v)); }
+			case "debug" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDebug(v); return set("debug", on(v)); }
+			case "baritone" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setUseBaritone(v); return set("baritone", on(v)); }
+			case "discord" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordEnabled(v); return set("discord", on(v)); }
+			case "embeds" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordUseEmbeds(v); return set("embeds", on(v)); }
+			case "skip" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setSkipIfPresent(v); return set("skip", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
 		}
 	}
