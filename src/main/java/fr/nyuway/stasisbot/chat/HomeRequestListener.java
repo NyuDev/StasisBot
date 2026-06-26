@@ -2,7 +2,6 @@ package fr.nyuway.stasisbot.chat;
 
 import fr.nyuway.stasisbot.StasisBot;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
-import fr.nyuway.stasisbot.control.ControlProtocol;
 import fr.nyuway.stasisbot.service.HomeService;
 import fr.nyuway.stasisbot.service.SurveillanceService;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
@@ -56,9 +55,6 @@ public final class HomeRequestListener {
 			body = parsed.get().body();
 			dm = knownSender == null && parsed.get().dm();
 		}
-		// Remote-control traffic is handled by ControlService; never feed it to the
-		// home/surveillance pipeline (it would just be relayed/logged as noise).
-		if (ControlProtocol.isControlLine(body)) return;
 		if (sender == null || body == null) {
 			if (config.debug() && config.matchesTrigger(raw)) {
 				// A line carries a trigger word but no sender could be extracted — log the

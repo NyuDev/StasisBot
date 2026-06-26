@@ -4,14 +4,13 @@ import fr.nyuway.stasisbot.activation.StasisActivator;
 import fr.nyuway.stasisbot.chat.HomeRequestListener;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
 import fr.nyuway.stasisbot.entity.PearlDetector;
+import fr.nyuway.stasisbot.control.ControlHttpServer;
 import fr.nyuway.stasisbot.gui.StasisMonitorScreen;
 import fr.nyuway.stasisbot.identity.IdentityResolver;
-import fr.nyuway.stasisbot.gui.ControllerScreen;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
 import fr.nyuway.stasisbot.scan.ChamberScanner;
 import fr.nyuway.stasisbot.service.AutoReconnect;
 import fr.nyuway.stasisbot.service.ConfigWatcher;
-import fr.nyuway.stasisbot.service.ControlService;
 import fr.nyuway.stasisbot.service.ControllerService;
 import fr.nyuway.stasisbot.service.BotDeathInfo;
 import fr.nyuway.stasisbot.service.BotActivity;
@@ -59,16 +58,15 @@ public final class StasisBotClient implements ClientModInitializer {
 		}
 	}
 
-	/** Controller mode: no bot services — just the remote panel and its channel. */
+	/** Controller mode: no bot services — the same panel, driving a remote bot over HTTP. */
 	private void initController(MinecraftClient client, StasisBotConfig config) {
-		ControllerService controllerSvc = new ControllerService(client, config);
+		ControllerService controllerSvc = new ControllerService(config);
 		controllerSvc.register();
 
 		KeyBinding openPanel = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
-			controllerSvc.tick();
 			while (openPanel.wasPressed()) {
-				if (c.player != null) c.setScreen(new ControllerScreen(config, controllerSvc));
+				if (c.player != null) c.setScreen(new StasisMonitorScreen(config, controllerSvc));
 			}
 		});
 		StasisBot.LOGGER.info("StasisBot CONTROLLER mode — press the keybind to open the remote panel");
@@ -96,11 +94,11 @@ public final class StasisBotClient implements ClientModInitializer {
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
-		ControlService control = new ControlService(client, config);
+		ControlHttpServer control = new ControlHttpServer(config);
 
 		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();
-		control.register();
+		control.start();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
@@ -113,7 +111,6 @@ public final class StasisBotClient implements ClientModInitializer {
 			chamberWatcher.tick();
 			entityWatcher.tick();
 			surveillance.tick();
-			control.tick();
 			while (openMonitor.wasPressed()) {
 				if (c.player != null) {
 					c.setScreen(new StasisMonitorScreen(config, index, pearls, identity));

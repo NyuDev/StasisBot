@@ -1,66 +1,54 @@
 package fr.nyuway.stasisbot.service;
 
 import fr.nyuway.stasisbot.StasisBot;
-import fr.nyuway.stasisbot.chat.ChatMessageParser;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
-import fr.nyuway.stasisbot.control.ControlChannel;
-import fr.nyuway.stasisbot.control.ControlInbox;
 import fr.nyuway.stasisbot.control.ControlProtocol;
-import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
-import net.minecraft.client.MinecraftClient;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Controller-side endpoint: runs on the operator's own client (when
- * {@code controllerMode} is on). Drives a headless bot over the encrypted whisper
- * channel — sends {@code HELLO}/{@code GET}/{@code SET}, receives
- * {@code WELCOME}/{@code STATE}/{@code OK}/{@code ERR} — and exposes the last synced
- * state to {@link fr.nyuway.stasisbot.gui.ControllerScreen}.
+ * Controller-side client of the bot's HTTP control API. Runs on the operator's own client
+ * (when {@code controllerMode} is on) and is driven by the unified {@code StasisMonitorScreen}.
+ * Each action — connect, refresh, toggle a setting — is one encrypted HTTP request/response
+ * to the bot's {@code /ctl} endpoint, off the render thread; the latest synced state feeds
+ * the menu. No 2b2t chat is involved.
  */
 public final class ControllerService {
 
 	public enum Status { IDLE, CONNECTING, SYNCED, ERROR }
 
-	private final MinecraftClient client;
 	private final StasisBotConfig config;
-	private ControlProtocol proto;
-	private ControlChannel channel;
+	private final HttpClient http = HttpClient.newBuilder()
+			.connectTimeout(Duration.ofSeconds(8))
+			.build();
+	private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "StasisBot-Controller");
+		t.setDaemon(true);
+		return t;
+	});
 
+	private volatile ControlProtocol proto;
 	private final Map<String, String> state = new LinkedHashMap<>();
 	private volatile Status status = Status.IDLE;
 	private volatile String info = "";
 
-	public ControllerService(MinecraftClient client, StasisBotConfig config) {
-		this.client = client;
+	public ControllerService(StasisBotConfig config) {
 		this.config = config;
-		rebuild();
-	}
-
-	/** Rebuild the crypto from the current secret (call after the secret changes in the GUI). */
-	public void rebuild() {
 		this.proto = new ControlProtocol(config.controlSecret());
-		this.channel = new ControlChannel(proto, this::sendLine, this::onFrame, "controller");
 	}
 
 	public void register() {
-		// Primary, cancel-proof receive path: a packet-level mixin feeds raw lines here,
-		// so the bot's replies are caught even when a cheat hides whispers from chat.
-		ControlInbox.setSink(this::handleRaw);
-		// Fabric events as a fallback (deduped by message id downstream).
-		ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-			if (!overlay) handleRaw(message.getString());
-		});
-		ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, ts) ->
-				handleRaw(message.getString()));
-		if (proto.isReady()) proto.selfTest();
-		StasisBot.LOGGER.info("[control] controller endpoint ready (target bot: {})",
-				config.controlBotName().isBlank() ? "NOT SET" : config.controlBotName());
-	}
-
-	public boolean isReady() {
-		return proto.isReady() && !config.controlBotName().isBlank();
+		StasisBot.LOGGER.info("[control] controller ready (endpoint: {})",
+				config.controlEndpoint().isBlank() ? "NOT SET" : config.controlEndpoint());
 	}
 
 	public Status status() { return status; }
@@ -78,88 +66,89 @@ public final class ControllerService {
 		return state.getOrDefault(key, def);
 	}
 
-	/** A short fingerprint of the synced state, so the GUI can detect changes and refresh. */
-	public String signature() {
-		return status + "|" + info + "|" + state;
+	private boolean ready() {
+		return proto != null && proto.isReady() && !config.controlEndpoint().isBlank();
 	}
 
+	/** Connect (or re-connect): rebuild crypto from the current secret, then HELLO. */
 	public void connect() {
-		rebuild();
-		if (!isReady()) {
+		this.proto = new ControlProtocol(config.controlSecret());
+		if (!ready()) {
 			status = Status.ERROR;
-			info = "Set a secret AND the bot name first";
+			info = "Set an endpoint AND a secret first";
 			return;
 		}
 		status = Status.CONNECTING;
-		info = "Connecting… (you and the bot must both be on the server)";
-		channel.send("HELLO", "");
+		info = "Connecting to " + config.controlEndpoint() + " …";
+		request("HELLO", "");
+	}
+
+	public void disconnect() {
+		status = Status.IDLE;
+		info = "disconnected";
+		state.clear();
 	}
 
 	public void set(String key, String value) {
-		if (!isReady()) return;
-		channel.send("SET", key + " " + value);
+		if (!ready()) return;
+		request("SET", key + " " + value);
 	}
 
 	public void refresh() {
-		if (isReady()) channel.send("GET", "");
+		if (ready()) request("GET", "");
 	}
 
-	private void handleRaw(String raw) {
-		if (proto == null || !proto.isReady()) return;
-		var parsed = ChatMessageParser.fromRaw(raw);
-		if (parsed.isEmpty()) return;
-		String sender = parsed.get().sender();
-		String body = parsed.get().body();
-		if (!ControlProtocol.isControlLine(body)) return;
-		if (sender == null || !sender.equalsIgnoreCase(config.controlBotName())) {
-			StasisBot.LOGGER.warn("[control/controller] saw control line from '{}' but expected bot '{}'",
-					sender, config.controlBotName());
-			return;
-		}
-		StasisBot.LOGGER.info("[control/controller] rx control whisper from bot '{}'", sender);
-		channel.onLine(body);
+	/** Fire one encrypted request off the render thread and fold the reply into the state. */
+	private void request(String type, String payload) {
+		final ControlProtocol p = this.proto;
+		final String url = endpointUrl();
+		final String body = p.seal(type, payload);
+		io.execute(() -> {
+			try {
+				HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+						.timeout(Duration.ofSeconds(8))
+						.header("Content-Type", "text/plain")
+						.POST(HttpRequest.BodyPublishers.ofString(body))
+						.build();
+				HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+				if (resp.statusCode() == 403) { status = Status.ERROR; info = "rejected — wrong secret?"; return; }
+				if (resp.statusCode() != 200) { status = Status.ERROR; info = "HTTP " + resp.statusCode(); return; }
+				Optional<ControlProtocol.Frame> f = p.open(resp.body());
+				if (f.isEmpty()) { status = Status.ERROR; info = "decrypt failed — secret mismatch?"; return; }
+				onFrame(f.get().type(), f.get().payload());
+			} catch (Exception e) {
+				status = Status.ERROR;
+				info = "unreachable: " + e.getClass().getSimpleName();
+				StasisBot.LOGGER.warn("[control] request failed: {}", e.toString());
+			}
+		});
 	}
 
 	private void onFrame(String type, String payload) {
 		switch (type) {
-			case "WELCOME" -> {
-				status = Status.SYNCED;
-				String name = payload != null && payload.contains(";") ? payload.substring(payload.indexOf(';') + 1) : payload;
-				info = "Synced with " + name;
-			}
-			case "STATE" -> {
-				parseState(payload);
-				status = Status.SYNCED;
-				if (info.startsWith("Connecting")) info = "Synced";
-			}
-			case "OK" -> info = "Applied: " + payload;
-			case "ERR" -> info = "Bot rejected: " + payload;
+			case "STATE" -> { parseState(payload); status = Status.SYNCED; info = "synced"; }
+			case "OK" -> info = "applied: " + payload;
+			case "ERR" -> info = "bot rejected: " + payload;
 			case "PONG" -> info = "pong";
-			default -> { /* ignore */ }
+			default -> { }
 		}
 	}
 
 	private void parseState(String payload) {
 		if (payload == null) return;
-		state.clear();
+		Map<String, String> fresh = new LinkedHashMap<>();
 		for (String pair : payload.split(";")) {
 			int eq = pair.indexOf('=');
-			if (eq > 0) state.put(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim());
+			if (eq > 0) fresh.put(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim());
 		}
+		state.clear();
+		state.putAll(fresh);
 	}
 
-	public void tick() {
-		if (proto != null && proto.isReady()) channel.tick();
-	}
-
-	private void sendLine(String line) {
-		if (client.player == null || client.player.networkHandler == null) {
-			StasisBot.LOGGER.warn("[control/controller] cannot send — not connected to a server");
-			return;
-		}
-		String target = config.controlBotName();
-		if (target == null || target.isBlank()) return;
-		StasisBot.LOGGER.info("[control/controller] sending via /{} to {}", config.whisperCommand(), target);
-		client.player.networkHandler.sendChatCommand(config.whisperCommand() + " " + target + " " + line);
+	private String endpointUrl() {
+		String base = config.controlEndpoint().trim();
+		if (!base.startsWith("http://") && !base.startsWith("https://")) base = "http://" + base;
+		if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+		return base + "/ctl";
 	}
 }

@@ -1,0 +1,138 @@
+package fr.nyuway.stasisbot.control;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import fr.nyuway.stasisbot.StasisBot;
+import fr.nyuway.stasisbot.config.StasisBotConfig;
+import net.minecraft.client.MinecraftClient;
+
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Bot-side control endpoint: a tiny HTTP server (JDK built-in, no deps) that accepts
+ * encrypted control frames at {@code POST /ctl}. The body is a sealed {@link ControlProtocol}
+ * frame; only frames that decrypt under the shared secret and fall inside the timestamp
+ * window are honoured, so an unauthenticated caller can do nothing. Config writes are
+ * marshaled onto the client thread (where the bot reads them), then the new state is sealed
+ * back in the response.
+ *
+ * <p>No 2b2t chat is involved. The port is exposed by Docker; the encryption secures it.
+ */
+public final class ControlHttpServer {
+
+	private final StasisBotConfig config;
+	private final ControlProtocol proto;
+	private final int port;
+	private HttpServer server;
+
+	public ControlHttpServer(StasisBotConfig config) {
+		this.config = config;
+		this.proto = new ControlProtocol(config.controlSecret());
+		this.port = config.controlPort();
+	}
+
+	public void start() {
+		if (!proto.isReady()) {
+			StasisBot.LOGGER.info("[control] HTTP API disabled (no controlSecret set)");
+			return;
+		}
+		try {
+			server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+			server.createContext("/ctl", this::handle);
+			server.createContext("/ping", ex -> respondText(ex, 200, "stasisbot"));
+			server.setExecutor(Executors.newSingleThreadExecutor(r -> {
+				Thread t = new Thread(r, "StasisBot-Control-HTTP");
+				t.setDaemon(true);
+				return t;
+			}));
+			server.start();
+			proto.selfTest();
+			StasisBot.LOGGER.info("[control] HTTP control API listening on 0.0.0.0:{}/ctl", port);
+		} catch (Exception e) {
+			StasisBot.LOGGER.error("[control] failed to start HTTP API on port {}: {}", port, e.toString());
+		}
+	}
+
+	public void stop() {
+		if (server != null) server.stop(0);
+	}
+
+	private void handle(HttpExchange ex) {
+		try {
+			if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+				respond(ex, 405, new byte[0]);
+				return;
+			}
+			byte[] body = ex.getRequestBody().readAllBytes();
+			String b64 = new String(body, StandardCharsets.UTF_8).trim();
+			Optional<ControlProtocol.Frame> f = proto.open(b64);
+			if (f.isEmpty() || !proto.inWindow(f.get().timestamp())) {
+				// Bad secret, tampered, or stale — reveal nothing.
+				respond(ex, 403, new byte[0]);
+				return;
+			}
+			String[] reply = process(f.get().type(), f.get().payload());
+			byte[] out = proto.seal(reply[0], reply[1]).getBytes(StandardCharsets.UTF_8);
+			respond(ex, 200, out);
+		} catch (Exception e) {
+			StasisBot.LOGGER.warn("[control] request error: {}", e.toString());
+			try { respond(ex, 500, new byte[0]); } catch (Exception ignored) { }
+		} finally {
+			ex.close();
+		}
+	}
+
+	/** Produce the (type, payload) reply for a request frame. */
+	private String[] process(String type, String payload) {
+		switch (type) {
+			case "HELLO", "GET" -> {
+				return new String[]{"STATE", ControlCore.snapshot(config)};
+			}
+			case "SET" -> {
+				boolean ok = applyOnClientThread(payload);
+				return ok ? new String[]{"STATE", ControlCore.snapshot(config)} : new String[]{"ERR", payload};
+			}
+			case "PING" -> {
+				return new String[]{"PONG", payload == null ? "" : payload};
+			}
+			default -> {
+				return new String[]{"ERR", "unknown"};
+			}
+		}
+	}
+
+	/** Apply a SET on the client thread (where the bot reads config), waiting briefly for the result. */
+	private boolean applyOnClientThread(String payload) {
+		MinecraftClient client = MinecraftClient.getInstance();
+		CompletableFuture<Boolean> fut = new CompletableFuture<>();
+		client.execute(() -> {
+			try { fut.complete(ControlCore.applySet(config, payload)); }
+			catch (Throwable t) { fut.complete(false); }
+		});
+		try {
+			return fut.get(5, TimeUnit.SECONDS);
+		} catch (Exception e) {
+			return false;
+		}
+	}
+
+	private static void respond(HttpExchange ex, int code, byte[] body) throws java.io.IOException {
+		ex.getResponseHeaders().set("Content-Type", "text/plain");
+		ex.sendResponseHeaders(code, body.length == 0 ? -1 : body.length);
+		if (body.length > 0) ex.getResponseBody().write(body);
+	}
+
+	private static void respondText(HttpExchange ex, int code, String text) {
+		try {
+			respond(ex, code, text.getBytes(StandardCharsets.UTF_8));
+		} catch (Exception ignored) {
+		} finally {
+			ex.close();
+		}
+	}
+}

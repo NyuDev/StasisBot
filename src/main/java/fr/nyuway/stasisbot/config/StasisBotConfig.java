@@ -168,8 +168,12 @@ public final class StasisBotConfig {
 	 * The secret is the key — keep it private; it never travels over the wire.
 	 */
 	private String controlSecret = "";
-	/** Controller only: the bot account's in-game name, so the controller knows who to whisper. */
+	/** Controller only: the bot account's in-game name (legacy; the HTTP API uses {@link #controlEndpoint}). */
 	private String controlBotName = "";
+	/** Bot only: TCP port the encrypted HTTP control API listens on (exposed by Docker). */
+	private int controlPort = 6969;
+	/** Controller only: the bot's control API URL, e.g. {@code http://host:6969}. */
+	private String controlEndpoint = "";
 
 	// --- Discord webhook (opt-in, off by default) ---------------------------
 	/** Master switch for Discord webhook notifications. */
@@ -263,6 +267,8 @@ public final class StasisBotConfig {
 	public boolean controllerMode() { return controllerMode; }
 	public String controlSecret() { return controlSecret == null ? "" : controlSecret.trim(); }
 	public String controlBotName() { return controlBotName == null ? "" : controlBotName.trim(); }
+	public int controlPort() { return controlPort > 0 && controlPort < 65536 ? controlPort : 6969; }
+	public String controlEndpoint() { return controlEndpoint == null ? "" : controlEndpoint.trim(); }
 	public long lagThresholdMillis() { return lagThresholdMillis; }
 	public long arrivalTimeoutMillis() { return arrivalTimeoutMillis; }
 	public String master() { return master; }
@@ -307,6 +313,8 @@ public final class StasisBotConfig {
 	public void setControllerMode(boolean v) { this.controllerMode = v; save(); }
 	public void setControlSecret(String v) { this.controlSecret = v == null ? "" : v.trim(); save(); }
 	public void setControlBotName(String v) { this.controlBotName = v == null ? "" : v.trim(); save(); }
+	public void setControlPort(int v) { this.controlPort = (v > 0 && v < 65536) ? v : 6969; save(); }
+	public void setControlEndpoint(String v) { this.controlEndpoint = v == null ? "" : v.trim(); save(); }
 	public void setWhisperCommand(String v) { if (v != null && !v.isBlank()) { this.whisperCommand = v.trim(); save(); } }
 
 	/** Replace the whole trigger-word list (cleaned; falls back to the presets if empty). */
@@ -660,6 +668,8 @@ public final class StasisBotConfig {
 		this.controllerMode = o.controllerMode;
 		this.controlSecret = o.controlSecret;
 		this.controlBotName = o.controlBotName;
+		this.controlPort = o.controlPort;
+		this.controlEndpoint = o.controlEndpoint;
 		this.watchedPlayers = o.watchedPlayers;
 		this.logAllChat = o.logAllChat;
 		this.chatWebhookUrl = o.chatWebhookUrl;
@@ -709,6 +719,8 @@ public final class StasisBotConfig {
 		if (alertGifUrl == null) alertGifUrl = "";
 		if (controlSecret == null) controlSecret = "";
 		if (controlBotName == null) controlBotName = "";
+		if (controlEndpoint == null) controlEndpoint = "";
+		if (controlPort <= 0 || controlPort >= 65536) controlPort = 6969;
 		if (memberWatchlists == null) memberWatchlists = new LinkedHashMap<>();
 		memberWatchlists.forEach((k, e) -> {
 			if (e == null) return;

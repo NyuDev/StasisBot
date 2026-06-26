@@ -6,59 +6,107 @@ import fr.nyuway.stasisbot.entity.PearlDetector;
 import fr.nyuway.stasisbot.identity.IdentityResolver;
 import fr.nyuway.stasisbot.model.StasisChamber;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
+import fr.nyuway.stasisbot.service.ControllerService;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
- * Status + quick-config panel (opened with the keybind). The left column lists
- * the stasis chambers the bot currently detects — click one to map it to a
- * player. The right column flips the common toggles and opens the mapping
- * editor. Every change persists to disk immediately via the config setters.
+ * The single hard-coded control panel (key H). It has two faces driven by one layout:
+ *
+ * <ul>
+ *   <li><b>Bot mode</b> (local): the toggles edit this client's own config and the left
+ *       column lists the stasis chambers it detects — the original monitor behaviour.</li>
+ *   <li><b>Controller mode</b> (remote): the very same toggles drive a <em>remote</em>
+ *       headless bot over the HTTP control API, and the left column becomes the connection
+ *       panel (endpoint + shared secret). Buttons read/write the bot's live state.</li>
+ * </ul>
+ *
+ * Which face is shown depends only on whether a {@link ControllerService} was supplied.
  */
 public final class StasisMonitorScreen extends Screen {
 
-	private final StasisBotConfig config;
-	private final ChamberIndex index;
-	private final PearlDetector pearls;
-	private final IdentityResolver identity;
+	/** The boolean settings, in display order: key (control-API name) and label. */
+	private static final String[][] TOGGLES = {
+			{"drop", "Drop pearl"},
+			{"reopen", "Reopen trap"},
+			{"return", "Return home"},
+			{"death", "Return on death"},
+			{"online", "Require online"},
+			{"members", "Members ctrl"},
+			{"debug", "Debug"},
+	};
 
-	/** Cheap fingerprint of the chamber list + pearl states; drives the live refresh. */
+	private final StasisBotConfig config;
+	private final ChamberIndex index;     // null in controller mode
+	private final PearlDetector pearls;   // null in controller mode
+	private final IdentityResolver identity; // null in controller mode
+	private final ControllerService remote;  // null in bot mode
+
 	private String lastSignature = "";
 	private long lastRefresh = 0L;
-
-	/** The "set home here" button, kept so its ✔ can track the bot's live position. */
 	private ButtonWidget homeButton;
 
+	// Controller-mode widgets, kept for live updates without a rebuild (so fields keep focus).
+	private final Map<String, ButtonWidget> toggleButtons = new LinkedHashMap<>();
+	private ButtonWidget langButton;
+	private ButtonWidget movementButton;
+	private TextFieldWidget endpointField;
+	private TextFieldWidget secretField;
+
+	/** Bot mode: drives the local client's config and shows detected chambers. */
 	public StasisMonitorScreen(StasisBotConfig config, ChamberIndex index, PearlDetector pearls,
 	                           IdentityResolver identity) {
-		super(Text.literal("StasisBot — monitor"));
+		this(config, index, pearls, identity, null);
+	}
+
+	/** Controller mode: the same panel, driving a remote bot over the control API. */
+	public StasisMonitorScreen(StasisBotConfig config, ControllerService remote) {
+		this(config, null, null, null, remote);
+	}
+
+	private StasisMonitorScreen(StasisBotConfig config, ChamberIndex index, PearlDetector pearls,
+	                            IdentityResolver identity, ControllerService remote) {
+		super(Text.literal(remote != null ? "StasisBot — remote control" : "StasisBot — monitor"));
 		this.config = config;
 		this.index = index;
 		this.pearls = pearls;
 		this.identity = identity;
+		this.remote = remote;
 	}
+
+	private boolean remote() { return remote != null; }
+	private boolean synced() { return remote != null && remote.status() == ControllerService.Status.SYNCED; }
 
 	@Override
 	protected void init() {
+		toggleButtons.clear();
 		buildToggles();
-		buildChamberButtons();
-		lastSignature = chamberSignature();
+		if (remote()) {
+			buildConnectionPanel();
+			refreshRemoteLabels();
+		} else {
+			buildChamberButtons();
+			lastSignature = chamberSignature();
+		}
 	}
 
 	@Override
 	public void tick() {
-		// Keep the home ✔ in sync with the bot's live position: it walks while this screen
-		// is open, so the marker must follow it on/off the saved home block in real time.
+		if (remote()) {
+			refreshRemoteLabels();
+			return;
+		}
 		if (homeButton != null) homeButton.setMessage(setHomeLabel());
-
-		// Live refresh, throttled to ~2.5/s. Rebuild only when the chamber set or a
-		// pearl's presence actually changed, so leaving the monitor open stays cheap.
 		long now = System.currentTimeMillis();
 		if (now - lastRefresh < 400L) return;
 		lastRefresh = now;
@@ -70,80 +118,214 @@ public final class StasisMonitorScreen extends Screen {
 		}
 	}
 
-	// --- right column: toggles & actions ------------------------------------
+	// --- routing: a setting reads/writes the local config OR the remote bot -----
+
+	private boolean getFlag(String key) {
+		if (remote()) return remote.flag(key, false);
+		return switch (key) {
+			case "drop" -> config.dropPearlForPlayer();
+			case "reopen" -> config.reopenTrigger();
+			case "return" -> config.returnHome();
+			case "death" -> config.returnHomeOnDeath();
+			case "online" -> config.requireOnline();
+			case "members" -> config.baseMembersControl();
+			case "debug" -> config.debug();
+			case "baritone" -> config.useBaritone();
+			default -> false;
+		};
+	}
+
+	private void setFlag(String key, boolean v) {
+		if (remote()) { remote.set(key, v ? "on" : "off"); return; }
+		switch (key) {
+			case "drop" -> config.setDropPearlForPlayer(v);
+			case "reopen" -> config.setReopenTrigger(v);
+			case "return" -> config.setReturnHome(v);
+			case "death" -> config.setReturnHomeOnDeath(v);
+			case "online" -> config.setRequireOnline(v);
+			case "members" -> config.setBaseMembersControl(v);
+			case "debug" -> config.setDebug(v);
+			case "baritone" -> config.setUseBaritone(v);
+			default -> { }
+		}
+	}
+
+	private String getLang() {
+		return remote() ? remote.text("lang", config.language()) : config.language();
+	}
+
+	private void toggleLang() {
+		String next = "fr".equalsIgnoreCase(getLang()) ? "en" : "fr";
+		if (remote()) remote.set("lang", next);
+		else config.setLanguage(next);
+	}
+
+	// --- right column: toggles & actions (shared layout) ------------------------
 
 	private void buildToggles() {
 		int bw = 150;
 		int x = width - bw - 20;
 		int top = 28;
 		int count = 15;
-		// Fit every control between the header and the bottom status line.
 		int avail = height - top - 34;
 		int step = Math.max(15, Math.min(22, avail / count));
 		int bh = Math.min(20, step - 2);
 		int y = top;
 
-		addToggle(x, y, bw, bh, "Drop pearl", config::dropPearlForPlayer, config::setDropPearlForPlayer);
-		addToggle(x, y += step, bw, bh, "Reopen trap", config::reopenTrigger, config::setReopenTrigger);
-		addToggle(x, y += step, bw, bh, "Return home", config::returnHome, config::setReturnHome);
-		addToggle(x, y += step, bw, bh, "Return on death", config::returnHomeOnDeath, config::setReturnHomeOnDeath);
-		addToggle(x, y += step, bw, bh, "Require online", config::requireOnline, config::setRequireOnline);
-		addToggle(x, y += step, bw, bh, "Members ctrl", config::baseMembersControl, config::setBaseMembersControl);
-		addToggle(x, y += step, bw, bh, "Debug", config::debug, config::setDebug);
-		addMovementToggle(x, y += step, bw, bh);
+		for (String[] t : TOGGLES) {
+			addToggle(x, y, bw, bh, t[0], t[1]);
+			y += step;
+		}
+		addMovementToggle(x, y, bw, bh);
+		y += step;
 
-		addDrawableChild(ButtonWidget.builder(langLabel(), b -> {
-			config.setLanguage(config.language().equals("fr") ? "en" : "fr");
-			b.setMessage(langLabel());
-		}).dimensions(x, y += step, bw, bh).build());
+		langButton = ButtonWidget.builder(langLabel(), b -> { toggleLang(); b.setMessage(langLabel()); })
+				.dimensions(x, y, bw, bh).build();
+		addDrawableChild(langButton);
+		y += step;
 
-		addDrawableChild(ButtonWidget.builder(controllerModeLabel(),
-				b -> { config.setControllerMode(!config.controllerMode()); b.setMessage(controllerModeLabel()); })
-				.dimensions(x, y += step, bw, bh).build());
+		if (!remote()) {
+			addDrawableChild(ButtonWidget.builder(controllerModeLabel(),
+					b -> { config.setControllerMode(!config.controllerMode()); b.setMessage(controllerModeLabel()); })
+					.dimensions(x, y, bw, bh).build());
+			y += step;
+		}
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bManage mappings…"),
 				b -> { if (client != null) client.setScreen(new AliasListScreen(this, config)); })
-				.dimensions(x, y += step, bw, bh).build());
+				.dimensions(x, y, bw, bh).build());
+		y += step;
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bTrigger words…"),
 				b -> { if (client != null) client.setScreen(new TriggerWordsScreen(this, config)); })
-				.dimensions(x, y += step, bw, bh).build());
+				.dimensions(x, y, bw, bh).build());
+		y += step;
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§dDiscord…"),
 				b -> { if (client != null) client.setScreen(new DiscordScreen(this, config)); })
-				.dimensions(x, y += step, bw, bh).build());
+				.dimensions(x, y, bw, bh).build());
+		y += step;
 
-		homeButton = ButtonWidget.builder(setHomeLabel(), b -> {
-			if (client != null && client.player != null) {
-				var p = client.player.getBlockPos();
-				config.setReturnPos(p.getX(), p.getY(), p.getZ());
-				b.setMessage(setHomeLabel());
-			}
-		}).dimensions(x, y += step, bw, bh).build();
-		addDrawableChild(homeButton);
+		if (remote()) {
+			addDrawableChild(ButtonWidget.builder(Text.literal("Refresh from bot"), b -> remote.refresh())
+					.dimensions(x, y, bw, bh).build());
+		} else {
+			homeButton = ButtonWidget.builder(setHomeLabel(), b -> {
+				if (client != null && client.player != null) {
+					var p = client.player.getBlockPos();
+					config.setReturnPos(p.getX(), p.getY(), p.getZ());
+					b.setMessage(setHomeLabel());
+				}
+			}).dimensions(x, y, bw, bh).build();
+			addDrawableChild(homeButton);
+			y += step;
+			addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> {
+				if (index != null) index.invalidate();
+				clearChildren();
+				init();
+			}).dimensions(x, y, bw, bh).build());
+		}
+	}
 
-		addDrawableChild(ButtonWidget.builder(Text.literal("Rescan"), b -> {
-			index.invalidate();
-			clearChildren();
-			init();
-		}).dimensions(x, y += step, bw, bh).build());
+	private void addToggle(int x, int y, int w, int h, String key, String label) {
+		ButtonWidget b = ButtonWidget.builder(toggleLabel(label, getFlag(key)), btn -> {
+			boolean next = !getFlag(key);
+			setFlag(key, next);
+			btn.setMessage(toggleLabel(label, next));
+		}).dimensions(x, y, w, h).build();
+		if (remote()) b.active = synced();
+		addDrawableChild(b);
+		toggleButtons.put(key, b);
+	}
+
+	private void addMovementToggle(int x, int y, int w, int h) {
+		boolean baritone = remote() || BaritoneSupport.isAvailable();
+		movementButton = ButtonWidget.builder(movementLabel(baritone), b -> {
+			if (!remote() && !BaritoneSupport.isAvailable()) return;
+			setFlag("baritone", !getFlag("baritone"));
+			b.setMessage(movementLabel(true));
+		}).dimensions(x, y, w, h).build();
+		movementButton.active = remote() ? synced() : baritone;
+		addDrawableChild(movementButton);
+	}
+
+	private Text movementLabel(boolean baritoneAvailable) {
+		if (!remote() && !baritoneAvailable) return Text.literal("Movement: §7Simple (no Baritone)");
+		boolean on = getFlag("baritone");
+		return Text.literal("Movement: " + (on ? "§aBaritone" : "§eSimple"));
+	}
+
+	// --- left column (controller mode): connection panel ------------------------
+
+	private void buildConnectionPanel() {
+		int x = 20;
+		int fw = 220;
+		int y = 34;
+
+		endpointField = new TextFieldWidget(textRenderer, x, y, fw, 18, Text.literal("endpoint"));
+		endpointField.setMaxLength(120);
+		endpointField.setText(config.controlEndpoint());
+		endpointField.setPlaceholder(Text.literal("§7http://host:6969"));
+		addDrawableChild(endpointField);
+
+		secretField = new TextFieldWidget(textRenderer, x, y + 24, fw, 18, Text.literal("secret"));
+		secretField.setMaxLength(128);
+		secretField.setText("");
+		secretField.setPlaceholder(Text.literal(config.controlSecret().isBlank()
+				? "§7shared secret (set it)" : "§7shared secret (saved — blank to keep)"));
+		addDrawableChild(secretField);
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("§aSave & Connect"), b -> saveAndConnect())
+				.dimensions(x, y + 48, 140, 20).build());
+		addDrawableChild(ButtonWidget.builder(Text.literal("Disconnect"), b -> remote.disconnect())
+				.dimensions(x + 144, y + 48, 76, 20).build());
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("§7Switch to BOT mode (relaunch)"),
+				b -> config.setControllerMode(false))
+				.dimensions(x, y + 74, fw, 18).build());
+	}
+
+	private void saveAndConnect() {
+		if (endpointField != null && !endpointField.getText().isBlank()) {
+			config.setControlEndpoint(endpointField.getText().trim());
+		}
+		if (secretField != null && !secretField.getText().isBlank()) {
+			config.setControlSecret(secretField.getText().trim());
+			secretField.setText("");
+		}
+		remote.connect();
+	}
+
+	/** Controller mode: refresh toggle labels/enabled from the synced state, no rebuild. */
+	private void refreshRemoteLabels() {
+		boolean synced = synced();
+		for (String[] t : TOGGLES) {
+			ButtonWidget b = toggleButtons.get(t[0]);
+			if (b == null) continue;
+			b.setMessage(synced ? toggleLabel(t[1], getFlag(t[0])) : Text.literal(t[1] + ": §7?"));
+			b.active = synced;
+		}
+		if (movementButton != null) {
+			movementButton.setMessage(synced ? movementLabel(true) : Text.literal("Movement: §7?"));
+			movementButton.active = synced;
+		}
+		if (langButton != null) {
+			langButton.setMessage(synced ? langLabel() : Text.literal("Language: §7?"));
+			langButton.active = synced;
+		}
 	}
 
 	private Text setHomeLabel() {
-		// ✔ only while the bot is actually standing on the saved home block. Step off it
-		// and the marker clears, re-inviting "set home here" at the new spot. No coordinates
-		// are ever shown — the home location stays private.
-		return Text.literal(standingOnHome() ? "§aSet home here §a\u2714" : "§bSet home here");
+		return Text.literal(standingOnHome() ? "§aSet home here §a✔" : "§bSet home here");
 	}
 
-	/** True when a home is pinned and the bot currently occupies that exact block. */
 	private boolean standingOnHome() {
 		if (!config.hasReturnPos() || client == null || client.player == null) return false;
 		var p = client.player.getBlockPos();
 		return p.getX() == config.returnX() && p.getY() == config.returnY() && p.getZ() == config.returnZ();
 	}
 
-	// --- left column: detected chambers (clickable) -------------------------
+	// --- left column (bot mode): detected chambers ------------------------------
 
 	private void buildChamberButtons() {
 		List<StasisChamber> chambers = currentChambers();
@@ -159,8 +341,7 @@ public final class StasisMonitorScreen extends Screen {
 			StasisChamber c = chambers.get(i);
 			boolean pearl = pearls.hasOwnPearl(client.world, c, chambers);
 			boolean wrong = pearl && isWrongPearl(c, chambers);
-			// green ● = our pearl, orange ● = a pearl dropped in the wrong chamber, red ○ = empty.
-			String dot = !pearl ? "§c\u25CB " : (wrong ? "§6\u25CF " : "§a\u25CF ");
+			String dot = !pearl ? "§c○ " : (wrong ? "§6● " : "§a● ");
 			String label = dot + "§f" + c.label() + " §7" + c.trigger().toShortString();
 			List<String> keywords = new ArrayList<>(c.signTokens());
 			addDrawableChild(ButtonWidget.builder(Text.literal(label),
@@ -171,18 +352,16 @@ public final class StasisMonitorScreen extends Screen {
 	}
 
 	private List<StasisChamber> currentChambers() {
-		boolean inWorld = client != null && client.world != null && client.player != null;
+		boolean inWorld = index != null && client != null && client.world != null && client.player != null;
 		return inWorld ? index.chambers(client.world, client.player.getBlockPos()) : List.of();
 	}
 
-	/** True when this chamber holds a pearl whose thrower doesn't match the chamber's sign. */
 	private boolean isWrongPearl(StasisChamber c, List<StasisChamber> chambers) {
 		if (client == null || client.world == null) return false;
 		String owner = pearls.ownPearlThrower(client.world, c, chambers);
 		return owner != null && !c.matchesAny(identity.tokensFor(owner));
 	}
 
-	/** Encodes each chamber's trigger position + whether it holds our pearl. */
 	private String chamberSignature() {
 		List<StasisChamber> chambers = currentChambers();
 		if (chambers.isEmpty() || client == null || client.world == null) return "none";
@@ -195,48 +374,14 @@ public final class StasisMonitorScreen extends Screen {
 		return sb.toString();
 	}
 
-	// --- toggle helpers -----------------------------------------------------
-
-	/**
-	 * Toggle between Baritone pathfinding and the built-in primitive walker. When
-	 * Baritone isn't installed there's nothing to choose, so the button is shown
-	 * greyed-out and locked on "Simple".
-	 */
-	private void addMovementToggle(int x, int y, int w, int h) {
-		boolean baritone = BaritoneSupport.isAvailable();
-		ButtonWidget button = ButtonWidget.builder(movementLabel(baritone), b -> {
-			if (!BaritoneSupport.isAvailable()) return; // locked when Baritone is absent
-			config.setUseBaritone(!config.useBaritone());
-			b.setMessage(movementLabel(true));
-		}).dimensions(x, y, w, h).build();
-		button.active = baritone; // greyed + unclickable without Baritone
-		addDrawableChild(button);
-	}
-
-	private Text movementLabel(boolean baritoneAvailable) {
-		if (!baritoneAvailable) {
-			return Text.literal("Movement: §7Simple (no Baritone)");
-		}
-		boolean on = config.useBaritone();
-		return Text.literal("Movement: " + (on ? "§aBaritone" : "§eSimple"));
-	}
-
-	private void addToggle(int x, int y, int w, int h, String label,
-	                       java.util.function.BooleanSupplier getter,
-	                       java.util.function.Consumer<Boolean> setter) {
-		addDrawableChild(ButtonWidget.builder(toggleLabel(label, getter.getAsBoolean()), b -> {
-			boolean next = !getter.getAsBoolean();
-			setter.accept(next);
-			b.setMessage(toggleLabel(label, next));
-		}).dimensions(x, y, w, h).build());
-	}
+	// --- shared helpers ---------------------------------------------------------
 
 	private static Text toggleLabel(String label, boolean on) {
 		return Text.literal(label + ": " + (on ? "§aON" : "§cOFF"));
 	}
 
 	private Text langLabel() {
-		return Text.literal("Language: " + config.language().toUpperCase());
+		return Text.literal("Language: " + getLang().toUpperCase(Locale.ROOT));
 	}
 
 	private Text controllerModeLabel() {
@@ -247,19 +392,32 @@ public final class StasisMonitorScreen extends Screen {
 	public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
 		super.render(ctx, mouseX, mouseY, delta);
 
+		String leftHeader = remote() ? "Connection" : "Detected chambers";
 		ctx.drawTextWithShadow(textRenderer,
-				Text.literal("Detected chambers").formatted(Formatting.AQUA), 20, 16, 0xFFFFFF);
+				Text.literal(leftHeader).formatted(Formatting.AQUA), 20, 16, 0xFFFFFF);
 		ctx.drawTextWithShadow(textRenderer,
-				Text.literal("Settings").formatted(Formatting.AQUA), width - 170, 16, 0xFFFFFF);
+				Text.literal(remote() ? "Settings (remote)" : "Settings").formatted(Formatting.AQUA),
+				width - 170, 16, 0xFFFFFF);
+
+		if (remote()) {
+			String dot = switch (remote.status()) {
+				case SYNCED -> "§a● synced";
+				case CONNECTING -> "§e● connecting…";
+				case ERROR -> "§c● error";
+				case IDLE -> "§7● idle";
+			};
+			ctx.drawTextWithShadow(textRenderer, Text.literal(dot + "  §7" + remote.info()), 20, height - 26, 0xFFFFFF);
+			ctx.drawTextWithShadow(textRenderer,
+					Text.literal("§8HTTP control API — no 2b2t chat involved"), 20, height - 14, 0x888888);
+			return;
+		}
 
 		if (currentChambers().isEmpty()) {
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("§7None nearby — park the bot next to your stasis signs."),
-					20, 34, 0xAAAAAA);
+					Text.literal("§7None nearby — park the bot next to your stasis signs."), 20, 34, 0xAAAAAA);
 		} else {
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("§8click a chamber to map it to a player"),
-					20, height - 14, 0x888888);
+					Text.literal("§8click a chamber to map it to a player"), 20, height - 14, 0x888888);
 		}
 
 		String master = config.master().isBlank() ? "(none)" : config.master();

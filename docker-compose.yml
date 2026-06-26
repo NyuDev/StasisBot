@@ -38,6 +38,10 @@ services:
       # http://127.0.0.1:3000 after sign-in, which must reach the container.
       # Only needed for the one-time login; harmless to leave mapped.
       - "127.0.0.1:3000:3000"
+      # Encrypted HTTP control API (remote panel). Exposed to the internet so a
+      # controller client can reach it; the AES-256-GCM secret is what guards it.
+      # Change the port via STASIS_CONTROL_PORT (and controlPort in the config).
+      - "${STASIS_CONTROL_PORT:-6969}:6969"
     environment:
       # Server the bot auto-joins on launch (host or host:port). Defaults to a local
       # server; set STASIS_SERVER in a .env (or here) to your target — e.g. our VPS
