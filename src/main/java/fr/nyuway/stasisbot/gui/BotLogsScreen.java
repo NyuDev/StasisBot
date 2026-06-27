@@ -54,7 +54,7 @@ public final class BotLogsScreen extends Screen {
 	public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
 		pump();
 		super.render(ctx, mouseX, mouseY, delta);
-		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot logs").formatted(Formatting.AQUA), 12, 14, 0xFFFFFF);
+		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot logs").formatted(Formatting.AQUA), 12, 14, 0xFFFFFFFF);
 
 		String log = controller.logs();
 		int top = 30;
@@ -68,13 +68,13 @@ public final class BotLogsScreen extends Screen {
 			for (int i = start; i < lines.length; i++) {
 				String line = lines[i];
 				if (textRenderer.getWidth(line) > maxW) line = textRenderer.trimToWidth(line, maxW);
-				ctx.drawTextWithShadow(textRenderer, Text.literal(line), 12, yy, 0xCCCCCC);
+				ctx.drawTextWithShadow(textRenderer, Text.literal(line), 12, yy, 0xFFCCCCCC);
 				yy += 10;
 			}
 		} else {
 			ctx.drawTextWithShadow(textRenderer,
 					Text.literal(controller.status() == ControllerService.Status.SYNCED ? "§7(no logs yet)" : "§7(connect on the main panel first)"),
-					12, top, 0xAAAAAA);
+					12, top, 0xFFAAAAAA);
 		}
 	}
 

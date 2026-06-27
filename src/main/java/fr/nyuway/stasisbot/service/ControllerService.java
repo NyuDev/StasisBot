@@ -183,7 +183,7 @@ public final class ControllerService {
 			} catch (Exception e) {
 				status = Status.ERROR;
 				info = "unreachable: " + e.getClass().getSimpleName();
-				StasisBot.LOGGER.warn("[control] request failed: {}", e.toString());
+				StasisBot.LOGGER.warn("[control] {} failed: {}", type, e.toString());
 			}
 		});
 	}

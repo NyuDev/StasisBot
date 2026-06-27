@@ -453,30 +453,30 @@ public final class StasisMonitorScreen extends Screen {
 
 		String leftHeader = remote() ? "Connection" : "Detected chambers";
 		ctx.drawTextWithShadow(textRenderer,
-				Text.literal(leftHeader).formatted(Formatting.AQUA), 20, 16, 0xFFFFFF);
+				Text.literal(leftHeader).formatted(Formatting.AQUA), 20, 16, 0xFFFFFFFF);
 		ctx.drawTextWithShadow(textRenderer,
 				Text.literal(remote() ? "Settings (remote)" : "Settings").formatted(Formatting.AQUA),
-				width - 170, 16, 0xFFFFFF);
+				width - 170, 16, 0xFFFFFFFF);
 
 		if (remote()) {
 			pumpRemote(); // keep the chamber list + position live (render is always called)
 			// The bot's detected chambers, below the connection panel.
 			int cy = 156;
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("Detected chambers (remote)").formatted(Formatting.AQUA), 20, cy, 0xFFFFFF);
+					Text.literal("Detected chambers (remote)").formatted(Formatting.AQUA), 20, cy, 0xFFFFFFFF);
 			cy += 13;
 			var chs = remote.chambers();
 			if (chs.isEmpty()) {
 				ctx.drawTextWithShadow(textRenderer,
 						Text.literal(synced() ? "§7(none — bot not parked at the base?)" : "§7(connect to see them)"),
-						20, cy, 0xAAAAAA);
+						20, cy, 0xFFAAAAAA);
 			} else {
 				int maxRows = Math.max(0, (height - cy - 34) / 11);
 				for (int i = 0; i < Math.min(chs.size(), maxRows); i++) {
 					var c = chs.get(i);
 					String dot = c.state() == '0' ? "§c○" : (c.state() == 'w' ? "§6●" : "§a●");
 					ctx.drawTextWithShadow(textRenderer,
-							Text.literal(dot + " §f" + c.label() + " §7" + c.pos()), 20, cy, 0xFFFFFF);
+							Text.literal(dot + " §f" + c.label() + " §7" + c.pos()), 20, cy, 0xFFFFFFFF);
 					cy += 11;
 				}
 			}
@@ -487,23 +487,23 @@ public final class StasisMonitorScreen extends Screen {
 				case ERROR -> "§c● error";
 				case IDLE -> "§7● idle";
 			};
-			ctx.drawTextWithShadow(textRenderer, Text.literal(dot + "  §7" + remote.info()), 20, height - 26, 0xFFFFFF);
+			ctx.drawTextWithShadow(textRenderer, Text.literal(dot + "  §7" + remote.info()), 20, height - 26, 0xFFFFFFFF);
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("§8HTTP control API — no 2b2t chat involved"), 20, height - 14, 0x888888);
+					Text.literal("§8HTTP control API — no 2b2t chat involved"), 20, height - 14, 0xFF888888);
 			return;
 		}
 
 		if (currentChambers().isEmpty()) {
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("§7None nearby — park the bot next to your stasis signs."), 20, 34, 0xAAAAAA);
+					Text.literal("§7None nearby — park the bot next to your stasis signs."), 20, 34, 0xFFAAAAAA);
 		} else {
 			ctx.drawTextWithShadow(textRenderer,
-					Text.literal("§8click a chamber to map it to a player"), 20, height - 14, 0x888888);
+					Text.literal("§8click a chamber to map it to a player"), 20, height - 14, 0xFF888888);
 		}
 
 		String master = config.master().isBlank() ? "(none)" : config.master();
 		ctx.drawTextWithShadow(textRenderer,
 				Text.literal("§7master: §f" + master + "  §7| DM: §f" + config.commandPrefix() + " help"),
-				width - 320, height - 14, 0xFFFFFF);
+				width - 320, height - 14, 0xFFFFFFFF);
 	}
 }

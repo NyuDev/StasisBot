@@ -33,7 +33,6 @@ public final class BotControlScreen extends Screen {
 
 	private boolean revealCoords = false;
 	private long lastPoll = 0L;
-	private int pollCount = 0;
 	private String bedFeedback = "";
 	private long bedFeedbackAt = 0L;
 
@@ -151,7 +150,6 @@ public final class BotControlScreen extends Screen {
 		long now = System.currentTimeMillis();
 		if (now - lastPoll > 1000L) {
 			lastPoll = now;
-			pollCount++;
 			controller.requestChatLog();
 			controller.requestPos(myName());
 		}
@@ -199,15 +197,8 @@ public final class BotControlScreen extends Screen {
 		super.render(ctx, mouseX, mouseY, delta);
 		int half = width / 2;
 
-		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot chat (live)").formatted(Formatting.AQUA), 12, 14, 0xFFFFFF);
-		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot control").formatted(Formatting.AQUA), half + 12, 14, 0xFFFFFF);
-
-		// Diagnostic line (temporary): tells us at a glance whether polling fires and data arrives.
-		String dbg = "§edbg st=" + controller.status() + " poll=" + pollCount
-				+ " chat=" + controller.chatLog().length()
-				+ " pos='" + controller.botPos() + "' d=" + controller.distance()
-				+ " | " + controller.info();
-		ctx.drawTextWithShadow(textRenderer, Text.literal(dbg), 12, height - 12, 0xFFFF55);
+		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot chat (live)").formatted(Formatting.AQUA), 12, 14, 0xFFFFFFFF);
+		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot control").formatted(Formatting.AQUA), half + 12, 14, 0xFFFFFFFF);
 
 		// --- live chat feed (left) ---
 		String log = controller.chatLog();
@@ -224,11 +215,11 @@ public final class BotControlScreen extends Screen {
 			for (int i = start; i < lines.length; i++) {
 				String line = lines[i];
 				if (textRenderer.getWidth(line) > maxW) line = textRenderer.trimToWidth(line, maxW);
-				ctx.drawTextWithShadow(textRenderer, Text.literal(line), 12, yy, 0xDDDDDD);
+				ctx.drawTextWithShadow(textRenderer, Text.literal(line), 12, yy, 0xFFDDDDDD);
 				yy += 10;
 			}
 		} else {
-			ctx.drawTextWithShadow(textRenderer, Text.literal("§7(no chat yet — connect to the bot)"), 12, feedTop, 0xAAAAAA);
+			ctx.drawTextWithShadow(textRenderer, Text.literal("§7(no chat yet — connect to the bot)"), 12, feedTop, 0xFFAAAAAA);
 		}
 
 		// --- bot position / distance (right top) ---
@@ -237,15 +228,15 @@ public final class BotControlScreen extends Screen {
 		String posStr = revealCoords
 				? (controller.botPos().isBlank() ? "§7?" : "§f" + controller.botPos())
 				: "§8hidden";
-		ctx.drawTextWithShadow(textRenderer, Text.literal("§7distance: " + distStr + "   §7pos: " + posStr), half + 12, 32, 0xFFFFFF);
+		ctx.drawTextWithShadow(textRenderer, Text.literal("§7distance: " + distStr + "   §7pos: " + posStr), half + 12, 32, 0xFFFFFFFF);
 
 		if (System.currentTimeMillis() - bedFeedbackAt < 3000L && !bedFeedback.isBlank()) {
-			ctx.drawTextWithShadow(textRenderer, Text.literal(bedFeedback), half + 12, 44, 0xFFFFFF);
+			ctx.drawTextWithShadow(textRenderer, Text.literal(bedFeedback), half + 12, 44, 0xFFFFFFFF);
 		}
 
 		if (controller.status() != ControllerService.Status.SYNCED) {
 			ctx.drawCenteredTextWithShadow(textRenderer,
-					Text.literal("§e● not connected — open the main panel and Save & Connect"), width / 2, height - 14, 0xFFFFFF);
+					Text.literal("§e● not connected — open the main panel and Save & Connect"), width / 2, height - 14, 0xFFFFFFFF);
 		}
 	}
 
