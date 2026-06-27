@@ -143,7 +143,13 @@ public final class StasisBotClient implements ClientModInitializer {
 								if (watcher.equalsIgnoreCase(pl.getGameProfile().name())) { dist = self.distanceTo(pl); break; }
 							}
 						}
-						return bp.getX() + " " + bp.getY() + " " + bp.getZ() + "|" + (dist < 0 ? "-1" : String.valueOf(Math.round(dist)));
+						boolean following = fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable()
+								&& fr.nyuway.stasisbot.activation.BaritoneFollow.isFollowing();
+						// "x y z|distance|following|athome"
+						return bp.getX() + " " + bp.getY() + " " + bp.getZ()
+								+ "|" + (dist < 0 ? "-1" : String.valueOf(Math.round(dist)))
+								+ "|" + (following ? "1" : "0")
+								+ "|" + (homeService.atHome() ? "1" : "0");
 					}
 					@Override public void goTo(int x, int y, int z) { homeService.remoteGoto(x, y, z); }
 					@Override public void come(String player) { homeService.remoteCome(player); }
@@ -157,6 +163,8 @@ public final class StasisBotClient implements ClientModInitializer {
 						if (fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable())
 							fr.nyuway.stasisbot.activation.BaritoneFollow.stop();
 					}
+					@Override public void goHome() { homeService.remoteGoHome(); }
+					@Override public void useBed(int x, int y, int z) { homeService.remoteUseBed(x, y, z); }
 					@Override public void serverDisconnect() {
 						autoReconnect.setEnabled(false);
 						var nh = client.getNetworkHandler();

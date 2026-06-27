@@ -49,6 +49,12 @@ public interface BotIntrospection {
 	/** Stop any remote-directed movement (and any active follow). */
 	void stopNav();
 
+	/** Send the bot back to its pinned home (walk there + settle centred/facing). */
+	void goHome();
+
+	/** Walk the bot to a bed and right-click it to set its spawn there. */
+	void useBed(int x, int y, int z);
+
 	/** Leave the current server and stay off (auto-reconnect disabled until a connect). */
 	void serverDisconnect();
 

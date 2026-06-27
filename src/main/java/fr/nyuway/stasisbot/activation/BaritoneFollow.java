@@ -33,4 +33,13 @@ public final class BaritoneFollow {
 		IBaritone baritone = BaritoneAPI.getProvider().getPrimaryBaritone();
 		baritone.getPathingBehavior().cancelEverything();
 	}
+
+	/** True when Baritone is currently following something. */
+	public static boolean isFollowing() {
+		try {
+			return BaritoneAPI.getProvider().getPrimaryBaritone().getFollowProcess().isActive();
+		} catch (Throwable t) {
+			return false;
+		}
+	}
 }

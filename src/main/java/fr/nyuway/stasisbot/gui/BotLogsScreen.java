@@ -38,6 +38,11 @@ public final class BotLogsScreen extends Screen {
 
 	@Override
 	public void tick() {
+		pump();
+	}
+
+	/** Driven from render() too, since Screen.tick() isn't reliably called on this version. */
+	private void pump() {
 		long now = System.currentTimeMillis();
 		if (now - lastPoll > 2000L) {
 			lastPoll = now;
@@ -47,6 +52,7 @@ public final class BotLogsScreen extends Screen {
 
 	@Override
 	public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+		pump();
 		super.render(ctx, mouseX, mouseY, delta);
 		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot logs").formatted(Formatting.AQUA), 12, 14, 0xFFFFFF);
 

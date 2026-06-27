@@ -156,6 +156,16 @@ public final class ControlHttpServer {
 				if (intro != null) onClientThread(() -> { intro.stopNav(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "stop"};
 			}
+			case "GOHOME" -> {
+				if (intro != null) onClientThread(() -> { intro.goHome(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "gohome"};
+			}
+			case "BED" -> {
+				int[] c = parseCoords(payload);
+				if (intro == null || c == null) return new String[]{"ERR", "bed"};
+				onClientThread(() -> { intro.useBed(c[0], c[1], c[2]); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "bed"};
+			}
 			case "DISCONNECT" -> {
 				if (intro != null) onClientThread(() -> { intro.serverDisconnect(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "disconnect"};

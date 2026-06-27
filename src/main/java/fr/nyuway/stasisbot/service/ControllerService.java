@@ -47,6 +47,8 @@ public final class ControllerService {
 	private volatile String logs = "";
 	private volatile String botPos = "";   // "x y z" — only shown when the operator reveals it
 	private volatile int distance = -1;     // blocks between the bot and the operator, -1 = unknown
+	private volatile boolean following = false; // bot currently following (Baritone)
+	private volatile boolean atHome = false;    // bot standing on its pinned home block
 
 	/** One chamber the remote bot detects: its sign label, position text, and pearl state. */
 	public record RemoteChamber(String label, String pos, char state) {}
@@ -85,6 +87,8 @@ public final class ControllerService {
 	public String logs() { return logs; }
 	public String botPos() { return botPos; }
 	public int distance() { return distance; }
+	public boolean following() { return following; }
+	public boolean atHome() { return atHome; }
 
 	// --- bot control actions ---------------------------------------------------
 
@@ -96,6 +100,8 @@ public final class ControllerService {
 	public void come(String player) { if (ready() && player != null) request("COME", player); }
 	public void follow(String player) { if (ready() && player != null && !player.isBlank()) request("FOLLOW", player); }
 	public void stopNav() { if (ready()) request("STOP", ""); }
+	public void goHome() { if (ready()) request("GOHOME", ""); }
+	public void useBed(int x, int y, int z) { if (ready()) request("BED", x + " " + y + " " + z); }
 	public void serverDisconnect() { if (ready()) request("DISCONNECT", ""); }
 	public void serverConnect(String hostPort) { if (ready()) request("CONNECT", hostPort == null ? "" : hostPort); }
 
@@ -193,11 +199,13 @@ public final class ControllerService {
 	}
 
 	private void parsePos(String payload) {
-		if (payload == null || payload.isBlank()) { botPos = ""; distance = -1; return; }
-		String[] f = payload.split("\\|", 2);
-		botPos = f[0].trim();
+		if (payload == null || payload.isBlank()) { botPos = ""; distance = -1; following = false; atHome = false; return; }
+		String[] f = payload.split("\\|");
+		botPos = f.length > 0 ? f[0].trim() : "";
 		try { distance = f.length > 1 ? Integer.parseInt(f[1].trim()) : -1; }
 		catch (NumberFormatException e) { distance = -1; }
+		following = f.length > 2 && f[2].trim().equals("1");
+		atHome = f.length > 3 && f[3].trim().equals("1");
 	}
 
 	private void parseChambers(String payload) {

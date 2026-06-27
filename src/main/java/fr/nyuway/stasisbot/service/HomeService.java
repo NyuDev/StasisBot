@@ -19,7 +19,11 @@ import fr.nyuway.stasisbot.scan.ChamberIndex;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
@@ -91,6 +95,7 @@ public final class HomeService {
 	private boolean teleportConfirmed;
 	private boolean pearlGiven;       // did we already hand the player their fresh pearl?
 	private long pearlFaceAt;         // when we started facing the player before dropping (0 = not yet)
+	private BlockPos bedTarget;       // a bed the bot is walking to (to set spawn), or null
 
 	private long fireAt;
 	private long safetyDeadline;
@@ -265,6 +270,58 @@ public final class HomeService {
 		stopManual();
 	}
 
+	/** Walk the bot back to its pinned home and settle (centre + facing), when idle. */
+	public void remoteGoHome() {
+		if (!config.hasReturnPos() || phase != Phase.IDLE || client.player == null) return;
+		returnTarget = new BlockPos(config.returnX(), config.returnY(), config.returnZ());
+		anchor.markMoved(); // so startReturn/arriveHome treat this as a real trip
+		navigator.startExact(returnTarget);
+		phase = Phase.RETURN;
+	}
+
+	/** True when the bot is standing on its pinned home block (for the remote panel's indicator). */
+	public boolean atHome() {
+		if (!config.hasReturnPos() || client.player == null) return false;
+		BlockPos p = client.player.getBlockPos();
+		return p.getX() == config.returnX() && p.getY() == config.returnY() && p.getZ() == config.returnZ();
+	}
+
+	/** Walk the bot to a bed and right-click it to set its spawn there (when idle). */
+	public void remoteUseBed(int x, int y, int z) {
+		if (phase != Phase.IDLE || client.player == null) return;
+		bedTarget = new BlockPos(x, y, z);
+		startManual(bedTarget); // walk there; the per-tick reach check fires the interact
+	}
+
+	/** Get up if the bot is asleep — it must stay active. */
+	private void wakeIfSleeping() {
+		ClientPlayerEntity self = client.player;
+		if (self != null && self.isSleeping() && self.networkHandler != null) {
+			self.networkHandler.sendPacket(new ClientCommandC2SPacket(self, ClientCommandC2SPacket.Mode.STOP_SLEEPING));
+		}
+	}
+
+	/** Face and right-click the targeted bed, then clear the task. */
+	private void interactBed() {
+		ClientPlayerEntity self = client.player;
+		if (self == null || bedTarget == null) { bedTarget = null; return; }
+		navigator.stop(client);
+		Vec3d c = Vec3d.ofCenter(bedTarget);
+		double dx = c.x - self.getX();
+		double dz = c.z - self.getZ();
+		self.setYaw((float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0));
+		self.setPitch(45.0f);
+		if (client.interactionManager != null) {
+			client.interactionManager.interactBlock(self, Hand.MAIN_HAND,
+					new BlockHitResult(c, Direction.UP, bedTarget, false));
+		}
+		feedback.debug("bed: interacted to set spawn at " + bedTarget.toShortString());
+		BlockPos done = bedTarget;
+		bedTarget = null;
+		stopManual();
+		StasisBot.LOGGER.info("[bed] set spawn via bed at {}", done.toShortString());
+	}
+
 	private boolean containsTrigger(String body) {
 		return config.matchesTrigger(body);
 	}
@@ -336,6 +393,14 @@ public final class HomeService {
 		// Always check whether a pearl we dropped just got picked up — this outlives the
 		// request that dropped it (the bot may already be walking home).
 		pearlTracker.tick();
+
+		// The bot should never stay asleep — if it dozed off in a bed, get up immediately.
+		wakeIfSleeping();
+		// Bed task: once we've walked within reach of a targeted bed, interact to set its spawn.
+		if (bedTarget != null && client.player != null
+				&& client.player.getEyePos().distanceTo(Vec3d.ofCenter(bedTarget)) <= config.reach()) {
+			interactBed();
+		}
 
 		// Death first: if the bot got killed, respawn it and (optionally) walk it home
 		// before doing anything else. While dead/respawning this owns the tick.
@@ -774,6 +839,12 @@ public final class HomeService {
 	/** Settle on the home block, restore the original facing, then maybe restock. */
 	private void arriveHome(ClientPlayerEntity self) {
 		navigator.stop(client);
+		// Snap onto the exact centre of the home block (x+0.5, z+0.5) so the bot ends up
+		// standing ON its home, not a fraction off it. Tiny adjustment — within anti-cheat
+		// tolerance — done only when a fixed home is pinned.
+		if (config.hasReturnPos()) {
+			self.setPosition(config.returnX() + 0.5, self.getY(), config.returnZ() + 0.5);
+		}
 		// Prefer the facing the operator chose when they set the home remotely; otherwise
 		// restore the facing the bot had when it left (only if we have a recorded anchor —
 		// after a death it was cleared, so reading it would snap the bot to yaw/pitch 0).

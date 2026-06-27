@@ -32,8 +32,9 @@ public final class BotControlScreen extends Screen {
 	private ButtonWidget followButton;
 
 	private boolean revealCoords = false;
-	private boolean followMe = false;
 	private long lastPoll = 0L;
+	private String bedFeedback = "";
+	private long bedFeedbackAt = 0L;
 
 	public BotControlScreen(Screen parent, StasisBotConfig config, ControllerService controller) {
 		super(Text.literal("StasisBot — bot control"));
@@ -69,14 +70,19 @@ public final class BotControlScreen extends Screen {
 		addDrawableChild(revealButton);
 		y += step;
 
+		// Follow reflects the bot's ACTUAL state (synced from POS), so it stays right across re-opens.
 		followButton = ButtonWidget.builder(followLabel(), b -> {
-			followMe = !followMe;
-			b.setMessage(followLabel());
-			if (followMe) controller.follow(myName()); // native Baritone follow — tracks you continuously
-			else controller.stopNav();
+			if (controller.following()) controller.stopNav();
+			else controller.follow(myName());
 		}).dimensions(x, y, w / 2 - 2, 20).build();
 		addDrawableChild(followButton);
-		addDrawableChild(ButtonWidget.builder(Text.literal("Stop"), b -> { followMe = false; if (followButton != null) followButton.setMessage(followLabel()); controller.stopNav(); })
+		addDrawableChild(ButtonWidget.builder(Text.literal("Stop"), b -> controller.stopNav())
+				.dimensions(x + w / 2 + 2, y, w / 2 - 2, 20).build());
+		y += step;
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("§bGo home"), b -> controller.goHome())
+				.dimensions(x, y, w / 2 - 2, 20).build());
+		addDrawableChild(ButtonWidget.builder(Text.literal("Set bot bed"), b -> doBed())
 				.dimensions(x + w / 2 + 2, y, w / 2 - 2, 20).build());
 		y += step;
 
@@ -128,8 +134,13 @@ public final class BotControlScreen extends Screen {
 
 	@Override
 	public void tick() {
-		// Poll regardless of the cached status so the feed recovers after any transient blip;
-		// the requests no-op if the controller isn't configured.
+		pump();
+	}
+
+	/** Throttled fetch of the live chat + position. Driven from render() (always called) too,
+	 *  because Screen.tick() is not reliably invoked on this version. */
+	private void pump() {
+		if (followButton != null) followButton.setMessage(followLabel()); // reflect the bot's real state
 		long now = System.currentTimeMillis();
 		if (now - lastPoll > 1000L) {
 			lastPoll = now;
@@ -153,11 +164,30 @@ public final class BotControlScreen extends Screen {
 	}
 
 	private Text followLabel() {
-		return Text.literal("Follow me: " + (followMe ? "§aON" : "§cOFF"));
+		return Text.literal("Follow me: " + (controller.following() ? "§aON" : "§cOFF"));
+	}
+
+	private void doBed() {
+		if (client == null || client.world == null) {
+			bedFeedback = "not in a world";
+			bedFeedbackAt = System.currentTimeMillis();
+			return;
+		}
+		var ht = client.crosshairTarget;
+		if (ht instanceof net.minecraft.util.hit.BlockHitResult bhr
+				&& client.world.getBlockState(bhr.getBlockPos()).getBlock() instanceof net.minecraft.block.BedBlock) {
+			var bp = bhr.getBlockPos();
+			controller.useBed(bp.getX(), bp.getY(), bp.getZ());
+			bedFeedback = "§asent bot to bed " + bp.toShortString();
+		} else {
+			bedFeedback = "§elook at a bed first";
+		}
+		bedFeedbackAt = System.currentTimeMillis();
 	}
 
 	@Override
 	public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+		pump();
 		super.render(ctx, mouseX, mouseY, delta);
 		int half = width / 2;
 
@@ -191,6 +221,10 @@ public final class BotControlScreen extends Screen {
 				? (controller.botPos().isBlank() ? "§7?" : "§f" + controller.botPos())
 				: "§8hidden";
 		ctx.drawTextWithShadow(textRenderer, Text.literal("§7distance: " + distStr + "   §7pos: " + posStr), half + 12, 32, 0xFFFFFF);
+
+		if (System.currentTimeMillis() - bedFeedbackAt < 3000L && !bedFeedback.isBlank()) {
+			ctx.drawTextWithShadow(textRenderer, Text.literal(bedFeedback), half + 12, 44, 0xFFFFFF);
+		}
 
 		if (controller.status() != ControllerService.Status.SYNCED) {
 			ctx.drawCenteredTextWithShadow(textRenderer,

@@ -90,6 +90,21 @@ public final class StasisMonitorScreen extends Screen {
 	private boolean remote() { return remote != null; }
 	private boolean synced() { return remote != null && remote.status() == ControllerService.Status.SYNCED; }
 
+	private String myName() {
+		return client != null && client.player != null ? client.player.getGameProfile().name() : "";
+	}
+
+	/** Throttled fetch of the remote chamber list + position. Driven from render() (always
+	 *  called) because Screen.tick() is not reliably invoked on this version. */
+	private void pumpRemote() {
+		long now = System.currentTimeMillis();
+		if (now - lastChamberFetch > 2000L) {
+			lastChamberFetch = now;
+			remote.requestChambers();
+			remote.requestPos(myName());
+		}
+	}
+
 	@Override
 	protected void init() {
 		toggleButtons.clear();
@@ -355,8 +370,9 @@ public final class StasisMonitorScreen extends Screen {
 
 	private Text setHomeLabel() {
 		if (remote()) {
-			boolean justSet = System.currentTimeMillis() - homeFeedbackAt < 2000L;
-			return Text.literal(justSet ? "§aHome set ✔" : "§bSet home here");
+			if (System.currentTimeMillis() - homeFeedbackAt < 2000L) return Text.literal("§aHome set ✔");
+			// Reactive, like bot mode: ✔ while the bot is actually standing on its home block.
+			return Text.literal(remote.atHome() ? "§aSet home here §a✔" : "§bSet home here");
 		}
 		return Text.literal(standingOnHome() ? "§aSet home here §a✔" : "§bSet home here");
 	}
@@ -442,6 +458,7 @@ public final class StasisMonitorScreen extends Screen {
 				width - 170, 16, 0xFFFFFF);
 
 		if (remote()) {
+			pumpRemote(); // keep the chamber list + position live (render is always called)
 			// The bot's detected chambers, below the connection panel.
 			int cy = 156;
 			ctx.drawTextWithShadow(textRenderer,
