@@ -57,6 +57,8 @@ public final class HomeService {
 	private static final double ARRIVAL_RADIUS = 6.0;
 	/** Hold the facing toward the player this long before dropping, so the look packet is sent first. */
 	private static final long PEARL_FACE_SETTLE_MILLIS = 300L;
+	/** How close (blocks, eye→bed-centre) the bot must be before it right-clicks a bed. */
+	private static final double BED_INTERACT_DISTANCE = 2.2;
 	/** Hard cap on waiting for a lag spike to clear before giving up. */
 	private static final long LAG_WAIT_CAP_MILLIS = 15_000L;
 	/** Assumed travel speed (blocks/second) for the ETA estimate. */
@@ -96,6 +98,7 @@ public final class HomeService {
 	private boolean pearlGiven;       // did we already hand the player their fresh pearl?
 	private long pearlFaceAt;         // when we started facing the player before dropping (0 = not yet)
 	private BlockPos bedTarget;       // a bed the bot is walking to (to set spawn), or null
+	private BlockPos lastBed;         // the last bed the bot set as its spawn (for "go to spawn")
 
 	private long fireAt;
 	private long safetyDeadline;
@@ -286,6 +289,18 @@ public final class HomeService {
 		return p.getX() == config.returnX() && p.getY() == config.returnY() && p.getZ() == config.returnZ();
 	}
 
+	/** True when the named player (the operator) is standing on the bot's home block. */
+	public boolean watcherAtHome(String name) {
+		if (!config.hasReturnPos() || client.world == null || name == null || name.isBlank()) return false;
+		for (var p : client.world.getPlayers()) {
+			if (name.equalsIgnoreCase(p.getGameProfile().name())) {
+				BlockPos bp = p.getBlockPos();
+				return bp.getX() == config.returnX() && bp.getY() == config.returnY() && bp.getZ() == config.returnZ();
+			}
+		}
+		return false;
+	}
+
 	/** Walk the bot to a bed and right-click it to set its spawn there (when idle). */
 	public void remoteUseBed(int x, int y, int z) {
 		if (phase != Phase.IDLE || client.player == null) return;
@@ -316,10 +331,25 @@ public final class HomeService {
 					new BlockHitResult(c, Direction.UP, bedTarget, false));
 		}
 		feedback.debug("bed: interacted to set spawn at " + bedTarget.toShortString());
-		BlockPos done = bedTarget;
+		lastBed = bedTarget;
 		bedTarget = null;
 		stopManual();
-		StasisBot.LOGGER.info("[bed] set spawn via bed at {}", done.toShortString());
+		StasisBot.LOGGER.info("[bed] set spawn via bed at {}", lastBed.toShortString());
+	}
+
+	/** Walk the bot to the last bed it set as its spawn (when idle). */
+	public void remoteGoSpawn() {
+		if (lastBed == null || phase != Phase.IDLE) return;
+		startManual(lastBed);
+	}
+
+	/** Trigger a pearl restock from a chest next to the bot's current position (when idle). */
+	public void remoteRestock() {
+		if (phase != Phase.IDLE) return;
+		if (restock.begin()) {
+			feedback.debug("remote restock — pulling pearls from a nearby chest");
+			phase = Phase.RESTOCK;
+		}
 	}
 
 	private boolean containsTrigger(String body) {
@@ -396,9 +426,10 @@ public final class HomeService {
 
 		// The bot should never stay asleep — if it dozed off in a bed, get up immediately.
 		wakeIfSleeping();
-		// Bed task: once we've walked within reach of a targeted bed, interact to set its spawn.
+		// Bed task: once we've walked RIGHT UP to a targeted bed (within ~2 blocks, not just
+		// general reach), interact to set its spawn — bed-use needs the bot to be very close.
 		if (bedTarget != null && client.player != null
-				&& client.player.getEyePos().distanceTo(Vec3d.ofCenter(bedTarget)) <= config.reach()) {
+				&& client.player.getEyePos().distanceTo(Vec3d.ofCenter(bedTarget)) <= BED_INTERACT_DISTANCE) {
 			interactBed();
 		}
 

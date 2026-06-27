@@ -55,6 +55,12 @@ public interface BotIntrospection {
 	/** Walk the bot to a bed and right-click it to set its spawn there. */
 	void useBed(int x, int y, int z);
 
+	/** Walk the bot to the last bed it set as its spawn. */
+	void goSpawn();
+
+	/** Restock ender pearls from a chest next to the bot's current position. */
+	void restock();
+
 	/** Leave the current server and stay off (auto-reconnect disabled until a connect). */
 	void serverDisconnect();
 

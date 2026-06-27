@@ -33,6 +33,7 @@ public final class BotControlScreen extends Screen {
 
 	private boolean revealCoords = false;
 	private long lastPoll = 0L;
+	private int pollCount = 0;
 	private String bedFeedback = "";
 	private long bedFeedbackAt = 0L;
 
@@ -83,6 +84,12 @@ public final class BotControlScreen extends Screen {
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bGo home"), b -> controller.goHome())
 				.dimensions(x, y, w / 2 - 2, 20).build());
 		addDrawableChild(ButtonWidget.builder(Text.literal("Set bot bed"), b -> doBed())
+				.dimensions(x + w / 2 + 2, y, w / 2 - 2, 20).build());
+		y += step;
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("Go to spawn"), b -> controller.goSpawn())
+				.dimensions(x, y, w / 2 - 2, 20).build());
+		addDrawableChild(ButtonWidget.builder(Text.literal("Restock pearls"), b -> controller.restock())
 				.dimensions(x + w / 2 + 2, y, w / 2 - 2, 20).build());
 		y += step;
 
@@ -144,6 +151,7 @@ public final class BotControlScreen extends Screen {
 		long now = System.currentTimeMillis();
 		if (now - lastPoll > 1000L) {
 			lastPoll = now;
+			pollCount++;
 			controller.requestChatLog();
 			controller.requestPos(myName());
 		}
@@ -194,9 +202,18 @@ public final class BotControlScreen extends Screen {
 		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot chat (live)").formatted(Formatting.AQUA), 12, 14, 0xFFFFFF);
 		ctx.drawTextWithShadow(textRenderer, Text.literal("Bot control").formatted(Formatting.AQUA), half + 12, 14, 0xFFFFFF);
 
+		// Diagnostic line (temporary): tells us at a glance whether polling fires and data arrives.
+		String dbg = "§edbg st=" + controller.status() + " poll=" + pollCount
+				+ " chat=" + controller.chatLog().length()
+				+ " pos='" + controller.botPos() + "' d=" + controller.distance()
+				+ " | " + controller.info();
+		ctx.drawTextWithShadow(textRenderer, Text.literal(dbg), 12, height - 12, 0xFFFF55);
+
 		// --- live chat feed (left) ---
 		String log = controller.chatLog();
 		int feedTop = 30;
+		// Dark panel behind the feed so the text is always readable over the game world.
+		ctx.fill(8, feedTop - 2, half - 8, height - 36, 0x88000000);
 		int feedBottom = height - 40;
 		int rows = Math.max(0, (feedBottom - feedTop) / 10);
 		if (log != null && !log.isBlank()) {

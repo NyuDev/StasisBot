@@ -121,6 +121,7 @@ public final class StasisBotClient implements ClientModInitializer {
 					}
 					@Override public boolean setHome(int x, int y, int z, float yaw, float pitch) {
 						config.setReturnPos(x, y, z, yaw, pitch);
+						homeService.remoteGoHome(); // walk to the new home and settle centred/facing
 						return true;
 					}
 					@Override public void rescan() { index.invalidate(); }
@@ -145,11 +146,12 @@ public final class StasisBotClient implements ClientModInitializer {
 						}
 						boolean following = fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable()
 								&& fr.nyuway.stasisbot.activation.BaritoneFollow.isFollowing();
-						// "x y z|distance|following|athome"
+						// "x y z|distance|following|botAtHome|watcherAtHome"
 						return bp.getX() + " " + bp.getY() + " " + bp.getZ()
 								+ "|" + (dist < 0 ? "-1" : String.valueOf(Math.round(dist)))
 								+ "|" + (following ? "1" : "0")
-								+ "|" + (homeService.atHome() ? "1" : "0");
+								+ "|" + (homeService.atHome() ? "1" : "0")
+								+ "|" + (homeService.watcherAtHome(watcher) ? "1" : "0");
 					}
 					@Override public void goTo(int x, int y, int z) { homeService.remoteGoto(x, y, z); }
 					@Override public void come(String player) { homeService.remoteCome(player); }
@@ -165,6 +167,8 @@ public final class StasisBotClient implements ClientModInitializer {
 					}
 					@Override public void goHome() { homeService.remoteGoHome(); }
 					@Override public void useBed(int x, int y, int z) { homeService.remoteUseBed(x, y, z); }
+					@Override public void goSpawn() { homeService.remoteGoSpawn(); }
+					@Override public void restock() { homeService.remoteRestock(); }
 					@Override public void serverDisconnect() {
 						autoReconnect.setEnabled(false);
 						var nh = client.getNetworkHandler();

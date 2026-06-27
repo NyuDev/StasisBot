@@ -49,6 +49,7 @@ public final class ControllerService {
 	private volatile int distance = -1;     // blocks between the bot and the operator, -1 = unknown
 	private volatile boolean following = false; // bot currently following (Baritone)
 	private volatile boolean atHome = false;    // bot standing on its pinned home block
+	private volatile boolean watcherAtHome = false; // the operator is standing on the bot's home block
 
 	/** One chamber the remote bot detects: its sign label, position text, and pearl state. */
 	public record RemoteChamber(String label, String pos, char state) {}
@@ -89,6 +90,7 @@ public final class ControllerService {
 	public int distance() { return distance; }
 	public boolean following() { return following; }
 	public boolean atHome() { return atHome; }
+	public boolean watcherAtHome() { return watcherAtHome; }
 
 	// --- bot control actions ---------------------------------------------------
 
@@ -101,6 +103,8 @@ public final class ControllerService {
 	public void follow(String player) { if (ready() && player != null && !player.isBlank()) request("FOLLOW", player); }
 	public void stopNav() { if (ready()) request("STOP", ""); }
 	public void goHome() { if (ready()) request("GOHOME", ""); }
+	public void goSpawn() { if (ready()) request("SPAWN", ""); }
+	public void restock() { if (ready()) request("RESTOCK", ""); }
 	public void useBed(int x, int y, int z) { if (ready()) request("BED", x + " " + y + " " + z); }
 	public void serverDisconnect() { if (ready()) request("DISCONNECT", ""); }
 	public void serverConnect(String hostPort) { if (ready()) request("CONNECT", hostPort == null ? "" : hostPort); }
@@ -206,6 +210,7 @@ public final class ControllerService {
 		catch (NumberFormatException e) { distance = -1; }
 		following = f.length > 2 && f[2].trim().equals("1");
 		atHome = f.length > 3 && f[3].trim().equals("1");
+		watcherAtHome = f.length > 4 && f[4].trim().equals("1");
 	}
 
 	private void parseChambers(String payload) {

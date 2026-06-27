@@ -166,6 +166,14 @@ public final class ControlHttpServer {
 				onClientThread(() -> { intro.useBed(c[0], c[1], c[2]); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "bed"};
 			}
+			case "SPAWN" -> {
+				if (intro != null) onClientThread(() -> { intro.goSpawn(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "spawn"};
+			}
+			case "RESTOCK" -> {
+				if (intro != null) onClientThread(() -> { intro.restock(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "restock"};
+			}
 			case "DISCONNECT" -> {
 				if (intro != null) onClientThread(() -> { intro.serverDisconnect(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "disconnect"};

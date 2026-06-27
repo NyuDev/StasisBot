@@ -371,8 +371,9 @@ public final class StasisMonitorScreen extends Screen {
 	private Text setHomeLabel() {
 		if (remote()) {
 			if (System.currentTimeMillis() - homeFeedbackAt < 2000L) return Text.literal("§aHome set ✔");
-			// Reactive, like bot mode: ✔ while the bot is actually standing on its home block.
-			return Text.literal(remote.atHome() ? "§aSet home here §a✔" : "§bSet home here");
+			// Relative to YOU: ✔ when the operator is standing on the bot's home block (clicking
+			// would re-pin the same spot), not when the bot is there.
+			return Text.literal(remote.watcherAtHome() ? "§aSet home here §a✔" : "§bSet home here");
 		}
 		return Text.literal(standingOnHome() ? "§aSet home here §a✔" : "§bSet home here");
 	}
