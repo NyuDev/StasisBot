@@ -20,6 +20,11 @@ repositories {
 	maven { url "https://babbaj.github.io/maven/" }
 	// CurseForge proxy maven, for ViaFabricPlus (the headless multi-protocol mod).
 	maven { url "https://www.cursemaven.com" }
+	// Modrinth maven, for the dev-runtime performance mods (Lithium / FerriteCore / Sodium).
+	exclusiveContent {
+		forRepository { maven { url "https://api.modrinth.com/maven" } }
+		filter { includeGroup "maven.modrinth" }
+	}
 }
 
 loom {
@@ -62,6 +67,16 @@ dependencies {
 	// against or shipped in the jar. Skipped with -PjarOnly for the multi-version jar
 	// builds (they're tied to a specific MC version and the jar doesn't need them).
 	if (!project.hasProperty("jarOnly")) {
+		// Performance mods for the headless bot — pure logic/memory, no rendering changes, so
+		// they're safe under software GL (llvmpipe): Lithium lightens client-side ticking,
+		// FerriteCore cuts heap use (fewer GC pauses on the RAM-tight host).
+		modRuntimeOnly "maven.modrinth:lithium:mc1.21.11-0.21.4-fabric"
+		modRuntimeOnly "maven.modrinth:ferrite-core:8.2.0-fabric"
+		// Sodium (chunk-render optimiser) is opt-in (-PwithSodium, env STASIS_SODIUM): it can
+		// crash on Mesa llvmpipe software GL, so it's off by default and tested separately.
+		if (project.hasProperty("withSodium")) {
+			modRuntimeOnly "maven.modrinth:sodium:mc1.21.11-0.8.13-beta.2-fabric"
+		}
 		// Meteor Client — so the bot's anti-AFK bridge (reflection-only) works live.
 		modRuntimeOnly "meteordevelopment:meteor-client:${project.minecraft_version}-SNAPSHOT"
 		// ViaFabricPlus — lets the headless bot connect to a server on a different

@@ -60,7 +60,7 @@ set_opt() {
 		printf '%s:%s\n' "${key}" "${val}" >>"${OPTS}"
 	fi
 }
-set_opt maxFps "${SB_MAX_FPS:-10}"
+set_opt maxFps "${SB_MAX_FPS:-30}"
 set_opt renderDistance "${SB_RENDER_DISTANCE:-6}"
 set_opt simulationDistance "${SB_SIMULATION_DISTANCE:-6}"
 set_opt enableVsync false
@@ -124,6 +124,15 @@ case "${STASIS_VIA:-}" in
 	1|true|TRUE|yes|on)
 		GRADLE_ARGS="${GRADLE_ARGS} -PwithVia"
 		echo "[stasisbot] ViaFabricPlus enabled (STASIS_VIA) — multi-protocol on"
+		;;
+esac
+# Opt-in Sodium (chunk-render optimiser). Off by default: it can crash on the
+# software GL (llvmpipe) this headless container uses, so it's only enabled with
+# STASIS_SODIUM=1 to test whether it works on this host.
+case "${STASIS_SODIUM:-}" in
+	1|true|TRUE|yes|on)
+		GRADLE_ARGS="${GRADLE_ARGS} -PwithSodium"
+		echo "[stasisbot] Sodium enabled (STASIS_SODIUM) — testing software-GL rendering"
 		;;
 esac
 
