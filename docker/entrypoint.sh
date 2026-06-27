@@ -60,7 +60,7 @@ set_opt() {
 		printf '%s:%s\n' "${key}" "${val}" >>"${OPTS}"
 	fi
 }
-set_opt maxFps "${SB_MAX_FPS:-30}"
+set_opt maxFps "${SB_MAX_FPS:-20}"
 set_opt renderDistance "${SB_RENDER_DISTANCE:-6}"
 set_opt simulationDistance "${SB_SIMULATION_DISTANCE:-6}"
 set_opt enableVsync false

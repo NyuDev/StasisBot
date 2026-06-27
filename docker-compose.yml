@@ -57,6 +57,13 @@ services:
       # Set to 1 to load ViaFabricPlus (connect to a server on a different protocol
       # version). Off by default — the bot runs identically without it.
       STASIS_VIA: "${STASIS_VIA:-}"
+      # Headless render frame cap. A bot needs no visible frames; higher = smoother
+      # tick distribution but more CPU (software GL). 20 is a balance; lower it on a
+      # busy host (the bot already sends ~20 position updates/s regardless).
+      SB_MAX_FPS: "${SB_MAX_FPS:-20}"
+      # Set to 1 to load Sodium (chunk-render optimiser). Off by default — it can crash
+      # on the software GL (llvmpipe) used here; enable only to test it on this host.
+      STASIS_SODIUM: "${STASIS_SODIUM:-}"
     volumes:
       # Minecraft / mappings / library caches — keeps restarts fast.
       - gradle-cache:/root/.gradle
