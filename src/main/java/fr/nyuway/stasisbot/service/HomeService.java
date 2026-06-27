@@ -239,6 +239,29 @@ public final class HomeService {
 		if (phase == Phase.MANUAL) phase = Phase.IDLE;
 	}
 
+	// --- remote control (called on the client thread by the control API) --------
+
+	/** Walk the bot to fixed coordinates (ignored while it's busy serving a request). */
+	public void remoteGoto(int x, int y, int z) {
+		if (!isBusy()) startManual(new BlockPos(x, y, z));
+	}
+
+	/** Walk the bot to the named player's current position, if visible and not busy. */
+	public void remoteCome(String name) {
+		if (name == null || client.world == null || isBusy()) return;
+		for (var p : client.world.getPlayers()) {
+			if (name.equalsIgnoreCase(p.getGameProfile().name())) {
+				startManual(p.getBlockPos());
+				return;
+			}
+		}
+	}
+
+	/** Cancel any master-directed move. */
+	public void remoteStop() {
+		stopManual();
+	}
+
 	private boolean containsTrigger(String body) {
 		return config.matchesTrigger(body);
 	}

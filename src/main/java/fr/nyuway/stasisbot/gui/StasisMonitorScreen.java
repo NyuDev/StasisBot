@@ -303,9 +303,13 @@ public final class StasisMonitorScreen extends Screen {
 		addDrawableChild(ButtonWidget.builder(Text.literal("Disconnect"), b -> remote.disconnect())
 				.dimensions(x + 144, y + 48, 76, 20).build());
 
+		addDrawableChild(ButtonWidget.builder(Text.literal("§dBot Control…"),
+				b -> { if (client != null) client.setScreen(new BotControlScreen(this, config, remote)); })
+				.dimensions(x, y + 73, fw, 18).build());
+
 		addDrawableChild(ButtonWidget.builder(Text.literal("§7Switch to BOT mode (relaunch)"),
 				b -> config.setControllerMode(false))
-				.dimensions(x, y + 74, fw, 18).build());
+				.dimensions(x, y + 93, fw, 16).build());
 	}
 
 	private void saveAndConnect() {
@@ -426,7 +430,7 @@ public final class StasisMonitorScreen extends Screen {
 
 		if (remote()) {
 			// The bot's detected chambers, below the connection panel.
-			int cy = 138;
+			int cy = 156;
 			ctx.drawTextWithShadow(textRenderer,
 					Text.literal("Detected chambers (remote)").formatted(Formatting.AQUA), 20, cy, 0xFFFFFF);
 			cy += 13;

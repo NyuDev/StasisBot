@@ -117,12 +117,60 @@ public final class ControlHttpServer {
 				if (intro != null) onClientThread(() -> { intro.rescan(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "rescan"};
 			}
+			case "CHATLOG" -> {
+				if (intro == null) return new String[]{"CHATLOG", ""};
+				return new String[]{"CHATLOG", onClientThread(intro::chatLog, "")};
+			}
+			case "SAY" -> {
+				if (intro == null || payload == null || payload.isBlank()) return new String[]{"ERR", "say"};
+				onClientThread(() -> { intro.say(payload); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "say"};
+			}
+			case "POS" -> {
+				if (intro == null) return new String[]{"POS", ""};
+				return new String[]{"POS", onClientThread(() -> intro.posInfo(payload), "")};
+			}
+			case "GOTO" -> {
+				int[] c = parseCoords(payload);
+				if (intro == null || c == null) return new String[]{"ERR", "goto"};
+				onClientThread(() -> { intro.goTo(c[0], c[1], c[2]); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "goto"};
+			}
+			case "COME" -> {
+				if (intro == null || payload == null || payload.isBlank()) return new String[]{"ERR", "come"};
+				onClientThread(() -> { intro.come(payload.trim()); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "come"};
+			}
+			case "STOP" -> {
+				if (intro != null) onClientThread(() -> { intro.stopNav(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "stop"};
+			}
+			case "DISCONNECT" -> {
+				if (intro != null) onClientThread(() -> { intro.serverDisconnect(); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "disconnect"};
+			}
+			case "CONNECT" -> {
+				if (intro != null) onClientThread(() -> { intro.serverConnect(payload); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "connect"};
+			}
 			case "PING" -> {
 				return new String[]{"PONG", payload == null ? "" : payload};
 			}
 			default -> {
 				return new String[]{"ERR", "unknown"};
 			}
+		}
+	}
+
+	/** Parse "x y z" into three ints, or null if malformed. */
+	private static int[] parseCoords(String payload) {
+		if (payload == null) return null;
+		String[] p = payload.trim().split("\\s+");
+		if (p.length != 3) return null;
+		try {
+			return new int[]{Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2])};
+		} catch (NumberFormatException e) {
+			return null;
 		}
 	}
 

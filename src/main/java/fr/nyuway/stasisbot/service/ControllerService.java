@@ -43,6 +43,9 @@ public final class ControllerService {
 	private volatile List<RemoteChamber> chambers = new ArrayList<>();
 	private volatile Status status = Status.IDLE;
 	private volatile String info = "";
+	private volatile String chatLog = "";
+	private volatile String botPos = "";   // "x y z" — only shown when the operator reveals it
+	private volatile int distance = -1;     // blocks between the bot and the operator, -1 = unknown
 
 	/** One chamber the remote bot detects: its sign label, position text, and pearl state. */
 	public record RemoteChamber(String label, String pos, char state) {}
@@ -76,6 +79,21 @@ public final class ControllerService {
 	public List<RemoteChamber> chambers() {
 		return chambers;
 	}
+
+	public String chatLog() { return chatLog; }
+	public String botPos() { return botPos; }
+	public int distance() { return distance; }
+
+	// --- bot control actions ---------------------------------------------------
+
+	public void requestChatLog() { if (ready()) request("CHATLOG", ""); }
+	public void requestPos(String watcher) { if (ready()) request("POS", watcher == null ? "" : watcher); }
+	public void say(String text) { if (ready() && text != null && !text.isBlank()) request("SAY", text); }
+	public void gotoCoords(int x, int y, int z) { if (ready()) request("GOTO", x + " " + y + " " + z); }
+	public void come(String player) { if (ready() && player != null) request("COME", player); }
+	public void stopNav() { if (ready()) request("STOP", ""); }
+	public void serverDisconnect() { if (ready()) request("DISCONNECT", ""); }
+	public void serverConnect(String hostPort) { if (ready()) request("CONNECT", hostPort == null ? "" : hostPort); }
 
 	private boolean ready() {
 		return proto != null && proto.isReady() && !config.controlEndpoint().isBlank();
@@ -160,11 +178,21 @@ public final class ControllerService {
 		switch (type) {
 			case "STATE" -> { parseState(payload); status = Status.SYNCED; info = "synced"; }
 			case "CHAMBERS" -> { parseChambers(payload); status = Status.SYNCED; }
+			case "CHATLOG" -> { chatLog = payload == null ? "" : payload; status = Status.SYNCED; }
+			case "POS" -> { parsePos(payload); status = Status.SYNCED; }
 			case "OK" -> info = "applied: " + payload;
 			case "ERR" -> info = "bot rejected: " + payload;
 			case "PONG" -> info = "pong";
 			default -> { }
 		}
+	}
+
+	private void parsePos(String payload) {
+		if (payload == null || payload.isBlank()) { botPos = ""; distance = -1; return; }
+		String[] f = payload.split("\\|", 2);
+		botPos = f[0].trim();
+		try { distance = f.length > 1 ? Integer.parseInt(f[1].trim()) : -1; }
+		catch (NumberFormatException e) { distance = -1; }
 	}
 
 	private void parseChambers(String payload) {

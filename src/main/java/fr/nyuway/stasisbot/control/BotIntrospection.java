@@ -20,4 +20,32 @@ public interface BotIntrospection {
 
 	/** Force a fresh scan of nearby chambers. */
 	void rescan();
+
+	/** The bot's recent chat lines (newline-separated), for the live feed. */
+	String chatLog();
+
+	/** Send {@code text} as the bot — a command when it starts with {@code /}, else chat. */
+	void say(String text);
+
+	/**
+	 * The bot's position and its distance to a player. Returns {@code "x y z|distance"};
+	 * distance is {@code -1} when that player isn't visible. {@code watcher} is the name to
+	 * measure the distance to (e.g. the operator).
+	 */
+	String posInfo(String watcher);
+
+	/** Walk the bot to fixed coordinates. */
+	void goTo(int x, int y, int z);
+
+	/** Walk the bot to the named player (one-shot; the panel repeats it for "follow"). */
+	void come(String player);
+
+	/** Stop any remote-directed movement. */
+	void stopNav();
+
+	/** Leave the current server and stay off (auto-reconnect disabled until a connect). */
+	void serverDisconnect();
+
+	/** Connect (or reconnect): a blank target reconnects to the current server, else switches. */
+	void serverConnect(String hostPort);
 }

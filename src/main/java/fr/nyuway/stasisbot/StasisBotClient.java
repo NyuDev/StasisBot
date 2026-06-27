@@ -10,6 +10,7 @@ import fr.nyuway.stasisbot.identity.IdentityResolver;
 import fr.nyuway.stasisbot.scan.ChamberIndex;
 import fr.nyuway.stasisbot.scan.ChamberScanner;
 import fr.nyuway.stasisbot.service.AutoReconnect;
+import fr.nyuway.stasisbot.service.ChatTap;
 import fr.nyuway.stasisbot.service.ConfigWatcher;
 import fr.nyuway.stasisbot.service.ControllerService;
 import fr.nyuway.stasisbot.service.BotDeathInfo;
@@ -94,6 +95,7 @@ public final class StasisBotClient implements ClientModInitializer {
 		AutoReconnect autoReconnect = new AutoReconnect(client);
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
+		ChatTap chatTap = new ChatTap();
 		ControlHttpServer control = new ControlHttpServer(config,
 				new fr.nyuway.stasisbot.control.BotIntrospection() {
 					@Override public String chambers() {
@@ -125,10 +127,46 @@ public final class StasisBotClient implements ClientModInitializer {
 						return true;
 					}
 					@Override public void rescan() { index.invalidate(); }
+					@Override public String chatLog() { return chatTap.dump(); }
+					@Override public void say(String text) {
+						var nh = client.getNetworkHandler();
+						if (nh == null || text == null) return;
+						String t = text.trim();
+						if (t.isEmpty()) return;
+						if (t.startsWith("/")) nh.sendChatCommand(t.substring(1));
+						else nh.sendChatMessage(t);
+					}
+					@Override public String posInfo(String watcher) {
+						var self = client.player;
+						if (self == null) return "";
+						var bp = self.getBlockPos();
+						double dist = -1;
+						if (watcher != null && !watcher.isBlank() && client.world != null) {
+							for (var pl : client.world.getPlayers()) {
+								if (watcher.equalsIgnoreCase(pl.getGameProfile().name())) { dist = self.distanceTo(pl); break; }
+							}
+						}
+						return bp.getX() + " " + bp.getY() + " " + bp.getZ() + "|" + (dist < 0 ? "-1" : String.valueOf(Math.round(dist)));
+					}
+					@Override public void goTo(int x, int y, int z) { homeService.remoteGoto(x, y, z); }
+					@Override public void come(String player) { homeService.remoteCome(player); }
+					@Override public void stopNav() { homeService.remoteStop(); }
+					@Override public void serverDisconnect() {
+						autoReconnect.setEnabled(false);
+						var nh = client.getNetworkHandler();
+						if (nh != null) nh.getConnection().disconnect(net.minecraft.text.Text.literal("StasisBot: remote disconnect"));
+					}
+					@Override public void serverConnect(String hostPort) {
+						if (hostPort != null && !hostPort.isBlank()) autoReconnect.setServer(hostPort);
+						var nh = client.getNetworkHandler();
+						if (nh != null) nh.getConnection().disconnect(net.minecraft.text.Text.literal("StasisBot: switching server"));
+						autoReconnect.connectNow();
+					}
 				});
 
 		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();
+		chatTap.register();
 		control.start();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();

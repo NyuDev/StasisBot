@@ -28,7 +28,8 @@ public final class AutoReconnect {
 	private static final int RETRY_TICKS = 20 * 30;
 
 	private final MinecraftClient client;
-	private final String server;
+	private volatile String server;
+	private volatile boolean enabled = true;
 	private int cooldown = 0;
 
 	public AutoReconnect(MinecraftClient client) {
@@ -40,9 +41,26 @@ public final class AutoReconnect {
 		}
 	}
 
+	/** The server the bot auto-joins (host or host:port), or null on a desktop run. */
+	public String target() { return server; }
+
+	/** Point the bot at a different server (used by the remote "connect to server" action). */
+	public void setServer(String s) {
+		if (s != null && !s.isBlank()) {
+			this.server = s.trim();
+			StasisBot.LOGGER.info("[auto-connect] target set to {}", this.server);
+		}
+	}
+
+	/** Turn auto-reconnect on/off — off keeps the bot disconnected after a remote disconnect. */
+	public void setEnabled(boolean e) { this.enabled = e; }
+
+	/** Connect on the very next tick (used by remote connect/reconnect). */
+	public void connectNow() { this.enabled = true; this.cooldown = 0; }
+
 	public void tick() {
-		if (server == null) {
-			return; // not a headless run; leave manual play alone
+		if (server == null || !enabled) {
+			return; // not a headless run, or auto-reconnect disabled; leave it alone
 		}
 		if (client.world != null || client.getNetworkHandler() != null) {
 			return; // already in-game / queued / connecting at the play level
