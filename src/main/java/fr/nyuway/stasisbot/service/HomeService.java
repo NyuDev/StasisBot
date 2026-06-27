@@ -51,6 +51,8 @@ public final class HomeService {
 
 	/** How close a player must spawn to the trigger to count as "arrived". */
 	private static final double ARRIVAL_RADIUS = 6.0;
+	/** Hold the facing toward the player this long before dropping, so the look packet is sent first. */
+	private static final long PEARL_FACE_SETTLE_MILLIS = 300L;
 	/** Hard cap on waiting for a lag spike to clear before giving up. */
 	private static final long LAG_WAIT_CAP_MILLIS = 15_000L;
 	/** Assumed travel speed (blocks/second) for the ETA estimate. */
@@ -88,6 +90,7 @@ public final class HomeService {
 	private BlockPos returnTarget;    // where it should walk back to
 	private boolean teleportConfirmed;
 	private boolean pearlGiven;       // did we already hand the player their fresh pearl?
+	private long pearlFaceAt;         // when we started facing the player before dropping (0 = not yet)
 
 	private long fireAt;
 	private long safetyDeadline;
@@ -658,7 +661,19 @@ public final class HomeService {
 		if (!pearlGiven) {
 			if (config.dropPearlForPlayer()) {
 				if (PlayerActions.hasPearl(client)) {
-					PlayerActions.faceToward(client, currentSender);
+					// Face the player FIRST and let the look packet reach the server before the
+					// drop, so the pearl is thrown toward them — not wherever the bot last faced.
+					// We do it across a couple of ticks: start facing, settle, then drop.
+					if (pearlFaceAt == 0L) {
+						PlayerActions.faceToward(client, currentSender);
+						pearlFaceAt = System.currentTimeMillis();
+						return; // come back next tick once the rotation has been sent
+					}
+					if (System.currentTimeMillis() - pearlFaceAt < PEARL_FACE_SETTLE_MILLIS) {
+						PlayerActions.faceToward(client, currentSender); // keep facing while settling
+						return;
+					}
+					PlayerActions.faceToward(client, currentSender); // re-assert right before dropping
 					boolean dropped = PlayerActions.dropPearl(client);
 					feedback.debug(currentSender + ": drop 1 pearl — " + (dropped ? "OK" : "FAILED")
 							+ " (inv " + PlayerActions.countPearls(client) + ")");
@@ -759,9 +774,13 @@ public final class HomeService {
 	/** Settle on the home block, restore the original facing, then maybe restock. */
 	private void arriveHome(ClientPlayerEntity self) {
 		navigator.stop(client);
-		// Only restore facing when we actually have a recorded anchor; after a death the
-		// anchor was cleared, so reading it would snap the bot to yaw/pitch 0.
-		if (anchor.isRecorded()) {
+		// Prefer the facing the operator chose when they set the home remotely; otherwise
+		// restore the facing the bot had when it left (only if we have a recorded anchor —
+		// after a death it was cleared, so reading it would snap the bot to yaw/pitch 0).
+		if (config.hasReturnPos() && config.hasReturnFacing()) {
+			self.setYaw(config.returnYaw());
+			self.setPitch(config.returnPitch());
+		} else if (anchor.isRecorded()) {
 			self.setYaw(anchor.yaw());
 			self.setPitch(anchor.pitch());
 		}
@@ -806,6 +825,7 @@ public final class HomeService {
 		manual.clear();
 		teleportConfirmed = false;
 		pearlGiven = false;
+		pearlFaceAt = 0L;
 		phase = Phase.IDLE;
 	}
 

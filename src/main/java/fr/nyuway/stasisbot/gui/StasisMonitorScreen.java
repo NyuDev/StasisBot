@@ -55,6 +55,7 @@ public final class StasisMonitorScreen extends Screen {
 	private String lastSignature = "";
 	private long lastRefresh = 0L;
 	private long lastChamberFetch = 0L;
+	private long homeFeedbackAt = 0L;
 	private ButtonWidget homeButton;
 
 	// Controller-mode widgets, kept for live updates without a rebuild (so fields keep focus).
@@ -214,10 +215,15 @@ public final class StasisMonitorScreen extends Screen {
 				.dimensions(x, y, bw, bh).build());
 		y += step;
 
-		// Set home here: bot mode pins the local position; controller mode asks the bot to pin its own.
+		// Set home here: bot mode pins the bot's own block; controller mode sends the
+		// OPERATOR's position AND facing, so the bot adopts where YOU stand and look.
 		homeButton = ButtonWidget.builder(setHomeLabel(), b -> {
 			if (remote()) {
-				remote.setHome();
+				if (client != null && client.player != null) {
+					var p = client.player.getBlockPos();
+					remote.setHome(p.getX(), p.getY(), p.getZ(), client.player.getYaw(), client.player.getPitch());
+					homeFeedbackAt = System.currentTimeMillis();
+				}
 			} else if (client != null && client.player != null) {
 				var p = client.player.getBlockPos();
 				config.setReturnPos(p.getX(), p.getY(), p.getZ());
@@ -305,7 +311,10 @@ public final class StasisMonitorScreen extends Screen {
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§dBot Control…"),
 				b -> { if (client != null) client.setScreen(new BotControlScreen(this, config, remote)); })
-				.dimensions(x, y + 73, fw, 18).build());
+				.dimensions(x, y + 73, fw / 2 - 2, 18).build());
+		addDrawableChild(ButtonWidget.builder(Text.literal("§bBot logs…"),
+				b -> { if (client != null) client.setScreen(new BotLogsScreen(this, config, remote)); })
+				.dimensions(x + fw / 2 + 2, y + 73, fw / 2 - 2, 18).build());
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§7Switch to BOT mode (relaunch)"),
 				b -> config.setControllerMode(false))
@@ -341,10 +350,14 @@ public final class StasisMonitorScreen extends Screen {
 			langButton.active = synced;
 		}
 		for (ButtonWidget b : remoteGated) b.active = synced;
+		if (homeButton != null) homeButton.setMessage(setHomeLabel()); // shows the "Home set ✔" flash
 	}
 
 	private Text setHomeLabel() {
-		if (remote()) return Text.literal("§bSet home here");
+		if (remote()) {
+			boolean justSet = System.currentTimeMillis() - homeFeedbackAt < 2000L;
+			return Text.literal(justSet ? "§aHome set ✔" : "§bSet home here");
+		}
 		return Text.literal(standingOnHome() ? "§aSet home here §a✔" : "§bSet home here");
 	}
 

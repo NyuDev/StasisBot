@@ -15,8 +15,11 @@ public interface BotIntrospection {
 	 */
 	String chambers();
 
-	/** Pin the bot's current block as its home position. Returns true when set. */
-	boolean setHome();
+	/**
+	 * Set the bot's home to a position and facing chosen by the operator (the controller's
+	 * own block + look direction), not the bot's. Returns true when set.
+	 */
+	boolean setHome(int x, int y, int z, float yaw, float pitch);
 
 	/** Force a fresh scan of nearby chambers. */
 	void rescan();
@@ -37,10 +40,13 @@ public interface BotIntrospection {
 	/** Walk the bot to fixed coordinates. */
 	void goTo(int x, int y, int z);
 
-	/** Walk the bot to the named player (one-shot; the panel repeats it for "follow"). */
+	/** Walk the bot to the named player (one-shot). */
 	void come(String player);
 
-	/** Stop any remote-directed movement. */
+	/** Continuously follow the named player (native Baritone follow). */
+	void follow(String player);
+
+	/** Stop any remote-directed movement (and any active follow). */
 	void stopNav();
 
 	/** Leave the current server and stay off (auto-reconnect disabled until a connect). */

@@ -44,6 +44,7 @@ public final class ControllerService {
 	private volatile Status status = Status.IDLE;
 	private volatile String info = "";
 	private volatile String chatLog = "";
+	private volatile String logs = "";
 	private volatile String botPos = "";   // "x y z" — only shown when the operator reveals it
 	private volatile int distance = -1;     // blocks between the bot and the operator, -1 = unknown
 
@@ -81,19 +82,27 @@ public final class ControllerService {
 	}
 
 	public String chatLog() { return chatLog; }
+	public String logs() { return logs; }
 	public String botPos() { return botPos; }
 	public int distance() { return distance; }
 
 	// --- bot control actions ---------------------------------------------------
 
 	public void requestChatLog() { if (ready()) request("CHATLOG", ""); }
+	public void requestLogs() { if (ready()) request("LOGS", ""); }
 	public void requestPos(String watcher) { if (ready()) request("POS", watcher == null ? "" : watcher); }
 	public void say(String text) { if (ready() && text != null && !text.isBlank()) request("SAY", text); }
 	public void gotoCoords(int x, int y, int z) { if (ready()) request("GOTO", x + " " + y + " " + z); }
 	public void come(String player) { if (ready() && player != null) request("COME", player); }
+	public void follow(String player) { if (ready() && player != null && !player.isBlank()) request("FOLLOW", player); }
 	public void stopNav() { if (ready()) request("STOP", ""); }
 	public void serverDisconnect() { if (ready()) request("DISCONNECT", ""); }
 	public void serverConnect(String hostPort) { if (ready()) request("CONNECT", hostPort == null ? "" : hostPort); }
+
+	/** Set the bot's home to a chosen position + facing (the operator's). */
+	public void setHome(int x, int y, int z, float yaw, float pitch) {
+		if (ready()) request("SETHOME", x + " " + y + " " + z + " " + yaw + " " + pitch);
+	}
 
 	private boolean ready() {
 		return proto != null && proto.isReady() && !config.controlEndpoint().isBlank();
@@ -136,11 +145,6 @@ public final class ControllerService {
 		if (ready()) request("CHAMBERS", "");
 	}
 
-	/** Tell the bot to pin its current position as home. */
-	public void setHome() {
-		if (ready()) request("SETHOME", "");
-	}
-
 	/** Tell the bot to re-scan, then refresh the chamber list. */
 	public void rescan() {
 		if (!ready()) return;
@@ -179,6 +183,7 @@ public final class ControllerService {
 			case "STATE" -> { parseState(payload); status = Status.SYNCED; info = "synced"; }
 			case "CHAMBERS" -> { parseChambers(payload); status = Status.SYNCED; }
 			case "CHATLOG" -> { chatLog = payload == null ? "" : payload; status = Status.SYNCED; }
+			case "LOGS" -> { logs = payload == null ? "" : payload; status = Status.SYNCED; }
 			case "POS" -> { parsePos(payload); status = Status.SYNCED; }
 			case "OK" -> info = "applied: " + payload;
 			case "ERR" -> info = "bot rejected: " + payload;

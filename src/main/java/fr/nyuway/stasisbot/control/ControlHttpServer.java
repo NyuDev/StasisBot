@@ -109,8 +109,11 @@ public final class ControlHttpServer {
 				return new String[]{"CHAMBERS", onClientThread(intro::chambers, "")};
 			}
 			case "SETHOME" -> {
+				// payload: "x y z yaw pitch" — the operator's own position + facing.
 				if (intro == null) return new String[]{"ERR", "sethome"};
-				boolean ok = onClientThread(intro::setHome, false);
+				float[] hp = parseHome(payload);
+				if (hp == null) return new String[]{"ERR", "sethome"};
+				boolean ok = onClientThread(() -> intro.setHome((int) hp[0], (int) hp[1], (int) hp[2], hp[3], hp[4]), false);
 				return ok ? new String[]{"OK", "home set"} : new String[]{"ERR", "sethome"};
 			}
 			case "RESCAN" -> {
@@ -141,6 +144,14 @@ public final class ControlHttpServer {
 				onClientThread(() -> { intro.come(payload.trim()); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "come"};
 			}
+			case "FOLLOW" -> {
+				if (intro == null || payload == null || payload.isBlank()) return new String[]{"ERR", "follow"};
+				onClientThread(() -> { intro.follow(payload.trim()); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "follow"};
+			}
+			case "LOGS" -> {
+				return new String[]{"LOGS", fr.nyuway.stasisbot.service.LogTap.dump()};
+			}
 			case "STOP" -> {
 				if (intro != null) onClientThread(() -> { intro.stopNav(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "stop"};
@@ -159,6 +170,19 @@ public final class ControlHttpServer {
 			default -> {
 				return new String[]{"ERR", "unknown"};
 			}
+		}
+	}
+
+	/** Parse "x y z yaw pitch" into five floats, or null if malformed. */
+	private static float[] parseHome(String payload) {
+		if (payload == null) return null;
+		String[] p = payload.trim().split("\\s+");
+		if (p.length != 5) return null;
+		try {
+			return new float[]{Float.parseFloat(p[0]), Float.parseFloat(p[1]), Float.parseFloat(p[2]),
+					Float.parseFloat(p[3]), Float.parseFloat(p[4])};
+		} catch (NumberFormatException e) {
+			return null;
 		}
 	}
 

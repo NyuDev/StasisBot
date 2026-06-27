@@ -8,6 +8,7 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * Live "bot control" panel (opened from the remote menu). Drives the running bot over the
@@ -33,7 +34,6 @@ public final class BotControlScreen extends Screen {
 	private boolean revealCoords = false;
 	private boolean followMe = false;
 	private long lastPoll = 0L;
-	private long lastFollow = 0L;
 
 	public BotControlScreen(Screen parent, StasisBotConfig config, ControllerService controller) {
 		super(Text.literal("StasisBot — bot control"));
@@ -72,7 +72,7 @@ public final class BotControlScreen extends Screen {
 		followButton = ButtonWidget.builder(followLabel(), b -> {
 			followMe = !followMe;
 			b.setMessage(followLabel());
-			if (followMe) { controller.come(myName()); lastFollow = System.currentTimeMillis(); }
+			if (followMe) controller.follow(myName()); // native Baritone follow — tracks you continuously
 			else controller.stopNav();
 		}).dimensions(x, y, w / 2 - 2, 20).build();
 		addDrawableChild(followButton);
@@ -104,6 +104,11 @@ public final class BotControlScreen extends Screen {
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§7« Back"), b -> { if (client != null) client.setScreen(parent); })
 				.dimensions(x, y, w, 20).build());
+
+		// Pull the first chat + position immediately so the panel isn't blank for a second.
+		controller.requestChatLog();
+		controller.requestPos(myName());
+		lastPoll = System.currentTimeMillis();
 	}
 
 	private void sendChat() {
@@ -123,17 +128,24 @@ public final class BotControlScreen extends Screen {
 
 	@Override
 	public void tick() {
+		// Poll regardless of the cached status so the feed recovers after any transient blip;
+		// the requests no-op if the controller isn't configured.
 		long now = System.currentTimeMillis();
-		boolean synced = controller.status() == ControllerService.Status.SYNCED;
-		if (synced && now - lastPoll > 1000L) {
+		if (now - lastPoll > 1000L) {
 			lastPoll = now;
 			controller.requestChatLog();
 			controller.requestPos(myName());
 		}
-		if (followMe && synced && now - lastFollow > 2000L) {
-			lastFollow = now;
-			controller.come(myName()); // re-issue so the bot tracks your latest position
+	}
+
+	@Override
+	public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
+		if ((input.key() == GLFW.GLFW_KEY_ENTER || input.key() == GLFW.GLFW_KEY_KP_ENTER)
+				&& chatInput != null && chatInput.isFocused()) {
+			sendChat();
+			return true;
 		}
+		return super.keyPressed(input);
 	}
 
 	private Text revealLabel() {

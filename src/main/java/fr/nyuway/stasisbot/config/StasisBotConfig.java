@@ -95,6 +95,9 @@ public final class StasisBotConfig {
 	private Integer returnX = null;
 	private Integer returnY = null;
 	private Integer returnZ = null;
+	/** Optional facing (yaw/pitch) to settle into at the return position; null = keep the start facing. */
+	private Float returnYaw = null;
+	private Float returnPitch = null;
 	/** Don't teleport a player who isn't in the server player list. */
 	private boolean requireOnline = true;
 	/** Don't teleport a player who is already within the bot's render distance (already at base). */
@@ -260,6 +263,9 @@ public final class StasisBotConfig {
 	public Integer returnX() { return returnX; }
 	public Integer returnY() { return returnY; }
 	public Integer returnZ() { return returnZ; }
+	public Float returnYaw() { return returnYaw; }
+	public Float returnPitch() { return returnPitch; }
+	public boolean hasReturnFacing() { return returnYaw != null && returnPitch != null; }
 	public boolean hasReturnPos() { return returnX != null && returnY != null && returnZ != null; }
 	public boolean requireOnline() { return requireOnline; }
 	public boolean skipIfPresent() { return skipIfPresent; }
@@ -346,7 +352,11 @@ public final class StasisBotConfig {
 	public void setBaseMembersControl(boolean v) { this.baseMembersControl = v; save(); }
 	public void setDebug(boolean v) { this.debug = v; save(); }
 	public void setUseBaritone(boolean v) { this.useBaritone = v; save(); }
-	public void setReturnPos(Integer x, Integer y, Integer z) { this.returnX = x; this.returnY = y; this.returnZ = z; save(); }
+	public void setReturnPos(Integer x, Integer y, Integer z) { this.returnX = x; this.returnY = y; this.returnZ = z; this.returnYaw = null; this.returnPitch = null; save(); }
+	/** Set the return position together with a facing to settle into (used by remote "set home"). */
+	public void setReturnPos(int x, int y, int z, float yaw, float pitch) {
+		this.returnX = x; this.returnY = y; this.returnZ = z; this.returnYaw = yaw; this.returnPitch = pitch; save();
+	}
 	public void setReturnHomeOnDeath(boolean v) { this.returnHomeOnDeath = v; save(); }
 	public void setDiscordEnabled(boolean v) { this.discordEnabled = v; save(); }
 	public void setDiscordWebhookUrl(String v) { this.discordWebhookUrl = v == null ? "" : v.trim(); save(); }
@@ -662,6 +672,8 @@ public final class StasisBotConfig {
 		this.returnX = o.returnX;
 		this.returnY = o.returnY;
 		this.returnZ = o.returnZ;
+		this.returnYaw = o.returnYaw;
+		this.returnPitch = o.returnPitch;
 		this.requireOnline = o.requireOnline;
 		this.skipIfPresent = o.skipIfPresent;
 		this.requireBaseMemberForHome = o.requireBaseMemberForHome;

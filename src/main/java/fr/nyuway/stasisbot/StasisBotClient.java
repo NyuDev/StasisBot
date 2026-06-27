@@ -119,11 +119,8 @@ public final class StasisBotClient implements ClientModInitializer {
 						}
 						return sb.toString();
 					}
-					@Override public boolean setHome() {
-						var self = client.player;
-						if (self == null) return false;
-						var p = self.getBlockPos();
-						config.setReturnPos(p.getX(), p.getY(), p.getZ());
+					@Override public boolean setHome(int x, int y, int z, float yaw, float pitch) {
+						config.setReturnPos(x, y, z, yaw, pitch);
 						return true;
 					}
 					@Override public void rescan() { index.invalidate(); }
@@ -150,7 +147,16 @@ public final class StasisBotClient implements ClientModInitializer {
 					}
 					@Override public void goTo(int x, int y, int z) { homeService.remoteGoto(x, y, z); }
 					@Override public void come(String player) { homeService.remoteCome(player); }
-					@Override public void stopNav() { homeService.remoteStop(); }
+					@Override public void follow(String player) {
+						if (fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable())
+							fr.nyuway.stasisbot.activation.BaritoneFollow.followPlayer(player);
+						else homeService.remoteCome(player);
+					}
+					@Override public void stopNav() {
+						homeService.remoteStop();
+						if (fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable())
+							fr.nyuway.stasisbot.activation.BaritoneFollow.stop();
+					}
 					@Override public void serverDisconnect() {
 						autoReconnect.setEnabled(false);
 						var nh = client.getNetworkHandler();
@@ -167,6 +173,7 @@ public final class StasisBotClient implements ClientModInitializer {
 		new HomeRequestListener(config, homeService, surveillance).register();
 		deathWatcher.register();
 		chatTap.register();
+		fr.nyuway.stasisbot.service.LogTap.install();
 		control.start();
 
 		KeyBinding openMonitor = KeyBindings.registerOpenMonitor();
