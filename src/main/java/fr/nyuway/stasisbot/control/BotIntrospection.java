@@ -61,6 +61,15 @@ public interface BotIntrospection {
 	/** Restock ender pearls from a chest next to the bot's current position. */
 	void restock();
 
+	/** Fire (trigger) the detected stasis chamber whose trigger is at these coordinates. */
+	void fireChamber(int x, int y, int z);
+
+	/**
+	 * Process a home request for {@code player} — pull them in via their stasis, honouring all
+	 * the usual gates (base-member, already-in-render skip, online, debounce/anti-spam).
+	 */
+	void homeRequest(String player);
+
 	/** Leave the current server and stay off (auto-reconnect disabled until a connect). */
 	void serverDisconnect();
 

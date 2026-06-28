@@ -352,6 +352,27 @@ public final class HomeService {
 		}
 	}
 
+	/** Fire the detected chamber whose trigger sits at these coords (must be in reach). */
+	public boolean remoteFireChamber(int x, int y, int z) {
+		ClientWorld world = client.world;
+		ClientPlayerEntity self = client.player;
+		if (world == null || self == null) return false;
+		BlockPos trigger = new BlockPos(x, y, z);
+		for (StasisChamber c : index.chambers(world, self.getBlockPos())) {
+			if (c.trigger().equals(trigger)) {
+				if (self.getEyePos().distanceTo(Vec3d.ofCenter(trigger)) > config.reach()) {
+					StasisBot.LOGGER.info("[control] remote-fire '{}' skipped — out of reach", c.label());
+					return false;
+				}
+				boolean ok = activator.fire(client, c);
+				if (ok) botActivity.markTriggerUse();
+				StasisBot.LOGGER.info("[control] remote-fired chamber '{}' -> {}", c.label(), ok);
+				return ok;
+			}
+		}
+		return false;
+	}
+
 	private boolean containsTrigger(String body) {
 		return config.matchesTrigger(body);
 	}
@@ -426,6 +447,8 @@ public final class HomeService {
 
 		// The bot should never stay asleep — if it dozed off in a bed, get up immediately.
 		wakeIfSleeping();
+		// Keep the bot dead-centre on its home block while idle (x+0.5 / z+0.5, not a corner).
+		holdHomeCentre();
 		// Bed task: once we've walked RIGHT UP to a targeted bed (within ~2 blocks, not just
 		// general reach), interact to set its spawn — bed-use needs the bot to be very close.
 		if (bedTarget != null && client.player != null
@@ -870,24 +893,55 @@ public final class HomeService {
 	/** Settle on the home block, restore the original facing, then maybe restock. */
 	private void arriveHome(ClientPlayerEntity self) {
 		navigator.stop(client);
-		// Snap onto the exact centre of the home block (x+0.5, z+0.5) so the bot ends up
-		// standing ON its home, not a fraction off it. Tiny adjustment — within anti-cheat
-		// tolerance — done only when a fixed home is pinned.
-		if (config.hasReturnPos()) {
-			self.setPosition(config.returnX() + 0.5, self.getY(), config.returnZ() + 0.5);
-		}
-		// Prefer the facing the operator chose when they set the home remotely; otherwise
-		// restore the facing the bot had when it left (only if we have a recorded anchor —
-		// after a death it was cleared, so reading it would snap the bot to yaw/pitch 0).
+		// Decide the facing to settle into first (operator-chosen on a remote set-home, else
+		// the facing the bot left with — but only if we still have a recorded anchor).
+		float yaw = self.getYaw();
+		float pitch = self.getPitch();
 		if (config.hasReturnPos() && config.hasReturnFacing()) {
-			self.setYaw(config.returnYaw());
-			self.setPitch(config.returnPitch());
+			yaw = config.returnYaw();
+			pitch = config.returnPitch();
 		} else if (anchor.isRecorded()) {
-			self.setYaw(anchor.yaw());
-			self.setPitch(anchor.pitch());
+			yaw = anchor.yaw();
+			pitch = anchor.pitch();
+		}
+		// Snap onto the EXACT CENTRE of the home block: x+0.5 / z+0.5 (not the corner). Use a
+		// full teleport (resets prev-position) and zero the velocity so it doesn't slide off.
+		// The per-tick centre-hold below then keeps it pinned there against any drift.
+		if (config.hasReturnPos()) {
+			double cx = config.returnX() + 0.5;
+			double cy = config.returnY();
+			double cz = config.returnZ() + 0.5;
+			self.refreshPositionAndAngles(cx, cy, cz, yaw, pitch);
+			self.setVelocity(Vec3d.ZERO);
+			StasisBot.LOGGER.info("[home] arrived & centred on home block (fract x={}, z={})",
+					cx - Math.floor(cx), cz - Math.floor(cz));
+		} else {
+			self.setYaw(yaw);
+			self.setPitch(pitch);
 		}
 		anchor.reset();
 		maybeRestock();
+	}
+
+	/**
+	 * While idle and standing on the pinned home block, keep the bot snapped to the block's
+	 * exact centre (x+0.5 / z+0.5). A single teleport on arrival can drift back to a corner
+	 * (physics, residual movement, a server position tweak); re-asserting the centre each tick
+	 * — only a sub-block nudge, never a fast move — guarantees it sits dead-centre.
+	 */
+	private void holdHomeCentre() {
+		if (phase != Phase.IDLE || !requests.isEmpty() || bedTarget != null) return;
+		if (!config.hasReturnPos()) return;
+		ClientPlayerEntity self = client.player;
+		if (self == null) return;
+		BlockPos bp = self.getBlockPos();
+		if (bp.getX() != config.returnX() || bp.getY() != config.returnY() || bp.getZ() != config.returnZ()) return;
+		double cx = config.returnX() + 0.5;
+		double cz = config.returnZ() + 0.5;
+		if (Math.abs(self.getX() - cx) > 0.02 || Math.abs(self.getZ() - cz) > 0.02) {
+			self.setPosition(cx, self.getY(), cz);
+			self.setVelocity(0.0, self.getVelocity().y, 0.0);
+		}
 	}
 
 	/** Enter the restock phase if pearls are low and a chest is near, else finish. */

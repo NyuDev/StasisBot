@@ -42,6 +42,7 @@ public final class StasisMonitorScreen extends Screen {
 			{"return", "Return home"},
 			{"death", "Return on death"},
 			{"online", "Require online"},
+			{"skip", "Skip if present"},
 			{"members", "Members ctrl"},
 			{"debug", "Debug"},
 	};
@@ -52,7 +53,11 @@ public final class StasisMonitorScreen extends Screen {
 	private final IdentityResolver identity; // null in controller mode
 	private final ControllerService remote;  // null in bot mode
 
+	/** Where the remote "Detected chambers" header sits; the chamber buttons start just under it. */
+	private static final int CHAMBER_HEADER_Y = 156;
+
 	private String lastSignature = "";
+	private String remoteChamberSig = "";
 	private long lastRefresh = 0L;
 	private long lastChamberFetch = 0L;
 	private long homeFeedbackAt = 0L;
@@ -112,6 +117,8 @@ public final class StasisMonitorScreen extends Screen {
 		buildToggles();
 		if (remote()) {
 			buildConnectionPanel();
+			buildRemoteChamberButtons();
+			remoteChamberSig = remoteChamberSignature();
 			refreshRemoteLabels();
 		} else {
 			buildChamberButtons();
@@ -152,6 +159,7 @@ public final class StasisMonitorScreen extends Screen {
 			case "return" -> config.returnHome();
 			case "death" -> config.returnHomeOnDeath();
 			case "online" -> config.requireOnline();
+			case "skip" -> config.skipIfPresent();
 			case "members" -> config.baseMembersControl();
 			case "debug" -> config.debug();
 			case "baritone" -> config.useBaritone();
@@ -167,6 +175,7 @@ public final class StasisMonitorScreen extends Screen {
 			case "return" -> config.setReturnHome(v);
 			case "death" -> config.setReturnHomeOnDeath(v);
 			case "online" -> config.setRequireOnline(v);
+			case "skip" -> config.setSkipIfPresent(v);
 			case "members" -> config.setBaseMembersControl(v);
 			case "debug" -> config.setDebug(v);
 			case "baritone" -> config.setUseBaritone(v);
@@ -190,7 +199,7 @@ public final class StasisMonitorScreen extends Screen {
 		int bw = 150;
 		int x = width - bw - 20;
 		int top = 28;
-		int count = 15;
+		int count = 16;
 		int avail = height - top - 34;
 		int step = Math.max(15, Math.min(22, avail / count));
 		int bh = Math.min(20, step - 2);
@@ -415,6 +424,49 @@ public final class StasisMonitorScreen extends Screen {
 		return inWorld ? index.chambers(client.world, client.player.getBlockPos()) : List.of();
 	}
 
+	// --- left column (controller mode): remote chambers as clickable buttons ----
+
+	/** Build a clickable button per remote chamber; clicking opens its detail (reveal + trigger). */
+	private void buildRemoteChamberButtons() {
+		List<ControllerService.RemoteChamber> chs = remote.chambers();
+		if (chs.isEmpty()) return;
+		int x = 20;
+		int bw = 220;
+		int bh = 13;
+		int cy = CHAMBER_HEADER_Y + 13;
+		int maxRows = Math.max(0, (height - cy - 40) / (bh + 1));
+		for (int i = 0; i < Math.min(chs.size(), maxRows); i++) {
+			final ControllerService.RemoteChamber c = chs.get(i);
+			String dot = c.state() == '0' ? "§c○" : (c.state() == 'w' ? "§6●" : "§a●");
+			// Coords are intentionally hidden here — they are revealed on the detail screen.
+			ButtonWidget b = ButtonWidget.builder(Text.literal(dot + " §f" + c.label()),
+					btn -> { if (client != null) client.setScreen(new ChamberInfoScreen(this, remote, c)); })
+					.dimensions(x, cy, bw, bh).build();
+			addDrawableChild(b);
+			cy += bh + 1;
+		}
+	}
+
+	/** A fingerprint of the remote chamber list (labels + pearl states) to detect changes. */
+	private String remoteChamberSignature() {
+		StringBuilder sb = new StringBuilder();
+		for (ControllerService.RemoteChamber c : remote.chambers()) {
+			sb.append(c.label()).append(c.state()).append(';');
+		}
+		return sb.toString();
+	}
+
+	/** Rebuild the chamber buttons when the bot's list changes — but not mid-typing in a field. */
+	private void maybeRebuildRemoteChambers() {
+		String sig = remoteChamberSignature();
+		if (sig.equals(remoteChamberSig)) return;
+		if ((endpointField != null && endpointField.isFocused())
+				|| (secretField != null && secretField.isFocused())) return;
+		remoteChamberSig = sig;
+		clearChildren();
+		init();
+	}
+
 	private boolean isWrongPearl(StasisChamber c, List<StasisChamber> chambers) {
 		if (client == null || client.world == null) return false;
 		String owner = pearls.ownPearlThrower(client.world, c, chambers);
@@ -460,25 +512,18 @@ public final class StasisMonitorScreen extends Screen {
 
 		if (remote()) {
 			pumpRemote(); // keep the chamber list + position live (render is always called)
-			// The bot's detected chambers, below the connection panel.
-			int cy = 156;
+			maybeRebuildRemoteChambers(); // re-make the chamber buttons when the bot's list changes
+			// The bot's detected chambers (clickable buttons, built as children below the panel).
+			int cy = CHAMBER_HEADER_Y;
 			ctx.drawTextWithShadow(textRenderer,
 					Text.literal("Detected chambers (remote)").formatted(Formatting.AQUA), 20, cy, 0xFFFFFFFF);
-			cy += 13;
-			var chs = remote.chambers();
-			if (chs.isEmpty()) {
+			if (remote.chambers().isEmpty()) {
 				ctx.drawTextWithShadow(textRenderer,
 						Text.literal(synced() ? "§7(none — bot not parked at the base?)" : "§7(connect to see them)"),
-						20, cy, 0xFFAAAAAA);
+						20, cy + 13, 0xFFAAAAAA);
 			} else {
-				int maxRows = Math.max(0, (height - cy - 34) / 11);
-				for (int i = 0; i < Math.min(chs.size(), maxRows); i++) {
-					var c = chs.get(i);
-					String dot = c.state() == '0' ? "§c○" : (c.state() == 'w' ? "§6●" : "§a●");
-					ctx.drawTextWithShadow(textRenderer,
-							Text.literal(dot + " §f" + c.label() + " §7" + c.pos()), 20, cy, 0xFFFFFFFF);
-					cy += 11;
-				}
+				ctx.drawTextWithShadow(textRenderer,
+						Text.literal("§8click a chamber: reveal coords + trigger trap"), 20, height - 38, 0xFF888888);
 			}
 
 			String dot = switch (remote.status()) {

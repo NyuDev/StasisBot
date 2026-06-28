@@ -174,6 +174,17 @@ public final class ControlHttpServer {
 				if (intro != null) onClientThread(() -> { intro.restock(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "restock"};
 			}
+			case "FIRE" -> {
+				int[] c = parseCoords(payload);
+				if (intro == null || c == null) return new String[]{"ERR", "fire"};
+				onClientThread(() -> { intro.fireChamber(c[0], c[1], c[2]); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "fire"};
+			}
+			case "HOMEREQ" -> {
+				if (intro == null || payload == null || payload.isBlank()) return new String[]{"ERR", "homereq"};
+				onClientThread(() -> { intro.homeRequest(payload.trim()); return Boolean.TRUE; }, Boolean.FALSE);
+				return new String[]{"OK", "homereq"};
+			}
 			case "DISCONNECT" -> {
 				if (intro != null) onClientThread(() -> { intro.serverDisconnect(); return Boolean.TRUE; }, Boolean.FALSE);
 				return new String[]{"OK", "disconnect"};

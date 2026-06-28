@@ -26,4 +26,18 @@ public final class KeyBindings {
 				CATEGORY
 		));
 	}
+
+	/**
+	 * Controller-mode keybind (default: G) that asks the remote bot to pull the operator home
+	 * via their stasis — a normal home request, so the bot still honours skip-if-present and
+	 * the anti-spam debounce. Unbound-safe: defaults to G but can be cleared in Controls.
+	 */
+	public static KeyBinding registerHomeRequest() {
+		return KeyBindingHelper.registerKeyBinding(new KeyBinding(
+				"key.stasisbot.home_request",
+				InputUtil.Type.KEYSYM,
+				GLFW.GLFW_KEY_G,
+				CATEGORY
+		));
+	}
 }

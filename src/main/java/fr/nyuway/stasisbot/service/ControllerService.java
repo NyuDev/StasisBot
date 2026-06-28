@@ -106,6 +106,8 @@ public final class ControllerService {
 	public void goSpawn() { if (ready()) request("SPAWN", ""); }
 	public void restock() { if (ready()) request("RESTOCK", ""); }
 	public void useBed(int x, int y, int z) { if (ready()) request("BED", x + " " + y + " " + z); }
+	public void fireChamber(int x, int y, int z) { if (ready()) request("FIRE", x + " " + y + " " + z); }
+	public void homeRequest(String player) { if (ready() && player != null && !player.isBlank()) request("HOMEREQ", player); }
 	public void serverDisconnect() { if (ready()) request("DISCONNECT", ""); }
 	public void serverConnect(String hostPort) { if (ready()) request("CONNECT", hostPort == null ? "" : hostPort); }
 

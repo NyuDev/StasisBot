@@ -65,9 +65,24 @@ public final class StasisBotClient implements ClientModInitializer {
 		controllerSvc.register();
 
 		KeyBinding openPanel = KeyBindings.registerOpenMonitor();
+		KeyBinding homeRequest = KeyBindings.registerHomeRequest();
+		// Client-side debounce so a held/mashed key sends at most one request per window; the
+		// bot debounces too, and skip-if-present means a press while already at base is a no-op.
+		final long[] lastHomeReq = {0L};
 		ClientTickEvents.END_CLIENT_TICK.register(c -> {
 			while (openPanel.wasPressed()) {
 				if (c.player != null) c.setScreen(new StasisMonitorScreen(config, controllerSvc));
+			}
+			boolean pressed = false;
+			while (homeRequest.wasPressed()) pressed = true; // drain, collapse a burst to one
+			if (pressed && c.player != null) {
+				long now = System.currentTimeMillis();
+				if (now - lastHomeReq[0] >= 2000L) {
+					lastHomeReq[0] = now;
+					String me = c.player.getGameProfile().name();
+					controllerSvc.homeRequest(me);
+					StasisBot.LOGGER.info("[control] sent home request for {}", me);
+				}
 			}
 		});
 		StasisBot.LOGGER.info("StasisBot CONTROLLER mode — press the keybind to open the remote panel");
@@ -169,6 +184,8 @@ public final class StasisBotClient implements ClientModInitializer {
 					@Override public void useBed(int x, int y, int z) { homeService.remoteUseBed(x, y, z); }
 					@Override public void goSpawn() { homeService.remoteGoSpawn(); }
 					@Override public void restock() { homeService.remoteRestock(); }
+					@Override public void fireChamber(int x, int y, int z) { homeService.remoteFireChamber(x, y, z); }
+					@Override public void homeRequest(String player) { homeService.onHomeRequest(player, "", false); }
 					@Override public void serverDisconnect() {
 						autoReconnect.setEnabled(false);
 						var nh = client.getNetworkHandler();
