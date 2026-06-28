@@ -102,6 +102,10 @@ public final class StasisBotConfig {
 	private boolean requireOnline = true;
 	/** Don't teleport a player who is already within the bot's render distance (already at base). */
 	private boolean skipIfPresent = true;
+	/** When true, hard-lock the bot at the exact centre of its home block (kills horizontal velocity,
+	 *  so other players cannot push it). When false, the bot gently drifts back to centre if nudged
+	 *  but can be pushed around slightly. Default false (natural collision behaviour). */
+	private boolean lockAtHome = false;
 	/**
 	 * Only act on (and only log) home requests from base members — players whose name or
 	 * alias is on a detected stasis sign. Stops ordinary chat that happens to contain a
@@ -269,6 +273,7 @@ public final class StasisBotConfig {
 	public boolean hasReturnPos() { return returnX != null && returnY != null && returnZ != null; }
 	public boolean requireOnline() { return requireOnline; }
 	public boolean skipIfPresent() { return skipIfPresent; }
+	public boolean lockAtHome() { return lockAtHome; }
 	public boolean requireBaseMemberForHome() { return requireBaseMemberForHome; }
 	public boolean controllerMode() { return controllerMode; }
 	public String controlSecret() { return controlSecret == null ? "" : controlSecret.trim(); }
@@ -315,6 +320,7 @@ public final class StasisBotConfig {
 	public void setAutoWalk(boolean v) { this.autoWalk = v; save(); }
 	public void setRequireOnline(boolean v) { this.requireOnline = v; save(); }
 	public void setSkipIfPresent(boolean v) { this.skipIfPresent = v; save(); }
+	public void setLockAtHome(boolean v) { this.lockAtHome = v; save(); }
 	public void setDmFeedback(boolean v) { this.dmFeedback = v; save(); }
 	public void setControllerMode(boolean v) { this.controllerMode = v; save(); }
 	public void setControlSecret(String v) { this.controlSecret = v == null ? "" : v.trim(); save(); }
@@ -676,6 +682,7 @@ public final class StasisBotConfig {
 		this.returnPitch = o.returnPitch;
 		this.requireOnline = o.requireOnline;
 		this.skipIfPresent = o.skipIfPresent;
+		this.lockAtHome = o.lockAtHome;
 		this.requireBaseMemberForHome = o.requireBaseMemberForHome;
 		this.controllerMode = o.controllerMode;
 		this.controlSecret = o.controlSecret;

@@ -99,8 +99,17 @@ public final class BaritoneNavigator implements Navigator {
 			return Status.FAILED;
 		}
 
+		// Arrival check: use the block position (exact match) or horizontal distance from the bot's
+		// feet to the block centre.  The old eye-distance check included a fixed ~1.12-block vertical
+		// gap that made it impossible to fire for home blocks (where the bot stands ON the block).
+		if (player.getBlockPos().equals(target)) {
+			stop(client);
+			return Status.ARRIVED;
+		}
 		Vec3d centre = Vec3d.ofCenter(target);
-		if (player.getEyePos().distanceTo(centre) <= arriveDist) {
+		// Horizontal-only distance: compare at the bot's own Y so the vertical offset doesn't inflate it.
+		double horizontalSq = player.squaredDistanceTo(centre.x, player.getY(), centre.z);
+		if (horizontalSq <= arriveDist * arriveDist) {
 			stop(client);
 			return Status.ARRIVED;
 		}

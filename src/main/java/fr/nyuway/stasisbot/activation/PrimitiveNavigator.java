@@ -78,8 +78,9 @@ public final class PrimitiveNavigator implements Navigator {
 		double dz = centre.z - player.getZ();
 		double horizontal = Math.sqrt(dx * dx + dz * dz);
 
-		// Arrived: stop pressing keys.
-		if (player.getEyePos().distanceTo(centre) <= arriveDist || horizontal <= arriveDist) {
+		// Arrived: exact block match OR horizontal distance within the tolerance.
+		// (Using eye-distance included a fixed vertical gap that could prevent arrival detection.)
+		if (player.getBlockPos().equals(target) || horizontal <= arriveDist) {
 			stop(client);
 			return Status.ARRIVED;
 		}

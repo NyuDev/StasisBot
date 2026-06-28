@@ -879,12 +879,10 @@ public final class HomeService {
 			arriveHome(self);
 			return;
 		}
-		// Use the anchor's exact sub-block position as the arrival target so the
-		// navigator aims for the precise centre of the block (x+0.5, z+0.5).
-		double arriveDist = anchor.vec() != null
-				? anchor.vec().distanceTo(Vec3d.ofCenter(returnTarget)) + 0.6
-				: 0.8;
-		Navigator.Status status = navigator.tick(client, returnTarget, Math.max(0.6, arriveDist));
+		// Use a fixed arrival tolerance of 0.6 blocks so the navigator stops only when the bot
+		// is actually on the home block (or very close to it). The holdHomeCentre nudge then
+		// brings it to the exact centre within a few ticks via normal movement physics.
+		Navigator.Status status = navigator.tick(client, returnTarget, 0.6);
 		if (status != Navigator.Status.MOVING) {
 			arriveHome(self);
 		}
@@ -904,43 +902,68 @@ public final class HomeService {
 			yaw = anchor.yaw();
 			pitch = anchor.pitch();
 		}
-		// Snap onto the EXACT CENTRE of the home block: x+0.5 / z+0.5 (not the corner). Use a
-		// full teleport (resets prev-position) and zero the velocity so it doesn't slide off.
-		// The per-tick centre-hold below then keeps it pinned there against any drift.
+		// Set facing and zero horizontal momentum — Y velocity is kept so gravity still works.
+		// The actual horizontal centering is handled by holdHomeCentre's velocity nudge each
+		// tick, which is accepted by 2b2t without anti-cheat issues (normal movement physics).
+		self.setYaw(yaw);
+		self.setPitch(pitch);
+		self.setVelocity(0.0, self.getVelocity().y, 0.0);
 		if (config.hasReturnPos()) {
-			double cx = config.returnX() + 0.5;
-			double cy = config.returnY();
-			double cz = config.returnZ() + 0.5;
-			self.refreshPositionAndAngles(cx, cy, cz, yaw, pitch);
-			self.setVelocity(Vec3d.ZERO);
-			StasisBot.LOGGER.info("[home] arrived & centred on home block (fract x={}, z={})",
-					cx - Math.floor(cx), cz - Math.floor(cz));
-		} else {
-			self.setYaw(yaw);
-			self.setPitch(pitch);
+			StasisBot.LOGGER.info("[home] arrived at home (dist to centre: x={} z={})",
+					String.format("%.3f", Math.abs(self.getX() - (config.returnX() + 0.5))),
+					String.format("%.3f", Math.abs(self.getZ() - (config.returnZ() + 0.5))));
 		}
 		anchor.reset();
 		maybeRestock();
 	}
 
 	/**
-	 * While idle and standing on the pinned home block, keep the bot snapped to the block's
-	 * exact centre (x+0.5 / z+0.5). A single teleport on arrival can drift back to a corner
-	 * (physics, residual movement, a server position tweak); re-asserting the centre each tick
-	 * — only a sub-block nudge, never a fast move — guarantees it sits dead-centre.
+	 * While idle near the pinned home block, nudge the bot toward the exact block centre
+	 * (x+0.5 / z+0.5) using a tiny velocity each tick. Using velocity (not setPosition) means
+	 * the movement goes through Minecraft's normal packet path and is accepted by 2b2t without
+	 * triggering anti-cheat or rubber-banding. After a few ticks the bot converges to centre.
+	 *
+	 * <p>The Y axis is intentionally left to physics so the bot always stands on the block
+	 * surface; we only correct horizontal drift. The block Y check is also omitted so a small
+	 * discrepancy between the stored returnY and the bot's actual standing Y never breaks it.
+	 *
+	 * <p>When {@code lockAtHome} is on: the bot is also hard-snapped to centre (kills push-back
+	 * from other players). When off: it gently converges — other players can push it but it
+	 * drifts back on its own.
 	 */
 	private void holdHomeCentre() {
 		if (phase != Phase.IDLE || !requests.isEmpty() || bedTarget != null) return;
 		if (!config.hasReturnPos()) return;
 		ClientPlayerEntity self = client.player;
 		if (self == null) return;
+
+		// Only check XZ block position — ignore Y to avoid mismatches caused by floating-point
+		// floor differences between config returnY and the bot's actual feet position.
 		BlockPos bp = self.getBlockPos();
-		if (bp.getX() != config.returnX() || bp.getY() != config.returnY() || bp.getZ() != config.returnZ()) return;
+		if (bp.getX() != config.returnX() || bp.getZ() != config.returnZ()) return;
+
 		double cx = config.returnX() + 0.5;
 		double cz = config.returnZ() + 0.5;
-		if (Math.abs(self.getX() - cx) > 0.02 || Math.abs(self.getZ() - cz) > 0.02) {
+		double dx = cx - self.getX();
+		double dz = cz - self.getZ();
+		double distSq = dx * dx + dz * dz;
+
+		if (distSq < 1e-6) {
+			// Already dead-centre: if lock mode on, kill residual horizontal velocity.
+			if (config.lockAtHome()) self.setVelocity(0.0, self.getVelocity().y, 0.0);
+			return;
+		}
+
+		if (config.lockAtHome()) {
+			// Hard mode: snap position + kill velocity so other players cannot push the bot.
 			self.setPosition(cx, self.getY(), cz);
 			self.setVelocity(0.0, self.getVelocity().y, 0.0);
+		} else {
+			// Soft mode: apply a small velocity toward centre each tick (physics-based, avoids
+			// server rubber-banding); the bot converges to centre over ~5 ticks naturally.
+			double dist = Math.sqrt(distSq);
+			double speed = Math.min(0.08, dist); // cap at 0.08 m/tick (~walk speed)
+			self.setVelocity(dx / dist * speed, self.getVelocity().y, dz / dist * speed);
 		}
 	}
 

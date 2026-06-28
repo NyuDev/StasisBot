@@ -77,6 +77,7 @@ public final class MasterCommands {
 			case "discord" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordEnabled(v); return set("discord", on(v)); }
 			case "embeds" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordUseEmbeds(v); return set("embeds", on(v)); }
 			case "skip" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setSkipIfPresent(v); return set("skip", on(v)); }
+			case "lockhome" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLockAtHome(v); return set("lockhome", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
 		}
 	}
