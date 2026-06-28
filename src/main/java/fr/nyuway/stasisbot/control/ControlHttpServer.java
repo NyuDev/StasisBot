@@ -110,11 +110,23 @@ public final class ControlHttpServer {
 			}
 			case "SETHOME" -> {
 				// payload: "x y z yaw pitch" — the operator's own position + facing.
-				if (intro == null) return new String[]{"ERR", "sethome"};
-				float[] hp = parseHome(payload);
-				if (hp == null) return new String[]{"ERR", "sethome"};
-				boolean ok = onClientThread(() -> intro.setHome((int) hp[0], (int) hp[1], (int) hp[2], hp[3], hp[4]), false);
-				return ok ? new String[]{"OK", "home set"} : new String[]{"ERR", "sethome"};
+				// Coordinates MUST be parsed with Integer.parseInt, not Float.parseFloat:
+				// at base-scale magnitudes (~2^24) a float only has 2-block precision and
+				// rounds odd coordinates by ±1, causing the bot to home to the wrong block.
+				if (intro == null || payload == null) return new String[]{"ERR", "sethome"};
+				String[] hp = payload.trim().split("\\s+");
+				if (hp.length != 5) return new String[]{"ERR", "sethome"};
+				try {
+					int hx = Integer.parseInt(hp[0]);
+					int hy = Integer.parseInt(hp[1]);
+					int hz = Integer.parseInt(hp[2]);
+					float hyaw = Float.parseFloat(hp[3]);
+					float hpitch = Float.parseFloat(hp[4]);
+					boolean ok = onClientThread(() -> intro.setHome(hx, hy, hz, hyaw, hpitch), false);
+					return ok ? new String[]{"OK", "home set"} : new String[]{"ERR", "sethome"};
+				} catch (NumberFormatException e) {
+					return new String[]{"ERR", "sethome"};
+				}
 			}
 			case "RESCAN" -> {
 				if (intro != null) onClientThread(() -> { intro.rescan(); return Boolean.TRUE; }, Boolean.FALSE);
@@ -202,18 +214,7 @@ public final class ControlHttpServer {
 		}
 	}
 
-	/** Parse "x y z yaw pitch" into five floats, or null if malformed. */
-	private static float[] parseHome(String payload) {
-		if (payload == null) return null;
-		String[] p = payload.trim().split("\\s+");
-		if (p.length != 5) return null;
-		try {
-			return new float[]{Float.parseFloat(p[0]), Float.parseFloat(p[1]), Float.parseFloat(p[2]),
-					Float.parseFloat(p[3]), Float.parseFloat(p[4])};
-		} catch (NumberFormatException e) {
-			return null;
-		}
-	}
+	// parseHome has been inlined into the SETHOME case to use Integer.parseInt for coordinates.
 
 	/** Parse "x y z" into three ints, or null if malformed. */
 	private static int[] parseCoords(String payload) {
