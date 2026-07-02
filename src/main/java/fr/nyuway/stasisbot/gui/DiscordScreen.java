@@ -4,6 +4,7 @@ import fr.nyuway.stasisbot.config.DiscordEvent;
 import fr.nyuway.stasisbot.config.PingMode;
 import fr.nyuway.stasisbot.config.PingTarget;
 import fr.nyuway.stasisbot.config.StasisBotConfig;
+import fr.nyuway.stasisbot.service.ControllerService;
 import fr.nyuway.stasisbot.service.DiscordNotifier;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -25,6 +26,8 @@ public final class DiscordScreen extends Screen {
 
 	private final Screen parent;
 	private final StasisBotConfig config;
+	/** Non-null in controller mode: mutations are sent to the bot via the HTTP API. */
+	private final ControllerService controller;
 	private final DiscordNotifier notifier;
 	private final DiscordEvent[] events = DiscordEvent.values();
 
@@ -37,13 +40,72 @@ public final class DiscordScreen extends Screen {
 	private int listTop;
 	private String status = "";
 
+	/** Bot-mode constructor (no remote). */
 	public DiscordScreen(Screen parent, StasisBotConfig config) {
+		this(parent, config, null);
+	}
+
+	/** Controller-mode constructor: every mutation is forwarded to the bot over the control API. */
+	public DiscordScreen(Screen parent, StasisBotConfig config, ControllerService controller) {
 		super(Text.literal("StasisBot — Discord"));
 		this.parent = parent;
 		this.config = config;
+		this.controller = controller;
 		this.notifier = new DiscordNotifier(config);
 		this.urlDraft = config.discordWebhookUrl();
 		this.roleDraft = config.pingRole();
+	}
+
+	// --- mutation helpers: write local config AND forward to bot when in controller mode ---
+
+	private void doSetEnabled(boolean v) {
+		config.setDiscordEnabled(v);
+		if (controller != null) controller.set("discord", v ? "on" : "off");
+	}
+
+	private void doSetWebhookUrl(String url) {
+		config.setDiscordWebhookUrl(url);
+		if (controller != null) controller.set("discordwebhook", url);
+	}
+
+	private void doSetUseEmbeds(boolean v) {
+		config.setDiscordUseEmbeds(v);
+		if (controller != null) controller.set("embeds", v ? "on" : "off");
+	}
+
+	private void doSetPingTarget(PingTarget pt) {
+		config.setPingTarget(pt);
+		if (controller != null) controller.set("pingtarget", pt.name().toLowerCase(java.util.Locale.ROOT));
+	}
+
+	private void doSetPingRole(String role) {
+		config.setPingRole(role);
+		if (controller != null) controller.set("pingrole", role);
+	}
+
+	private void doSetEventEnabled(DiscordEvent e, boolean v) {
+		config.setDiscordEventEnabled(e, v);
+		if (controller != null) controller.set("discordevent", e.key() + " send " + (v ? "on" : "off"));
+	}
+
+	private void doSetEventPing(DiscordEvent e, PingMode v) {
+		config.setDiscordEventPing(e, v);
+		if (controller != null) controller.set("discordevent", e.key() + " ping " + v.name().toLowerCase(java.util.Locale.ROOT));
+	}
+
+	private void doSetEventDetails(DiscordEvent e, boolean v) {
+		config.setDiscordEventDetails(e, v);
+		if (controller != null) controller.set("discordevent", e.key() + " details " + (v ? "on" : "off"));
+	}
+
+	private void doSetEventCoords(DiscordEvent e, boolean v) {
+		config.setDiscordEventCoords(e, v);
+		if (controller != null) controller.set("discordevent", e.key() + " coords " + (v ? "on" : "off"));
+	}
+
+	private void doSetEventDistance(DiscordEvent e, boolean v) {
+		config.setDiscordEventDistance(e, v);
+		if (controller != null) controller.set("discordevent", e.key() + " dist " + (v ? "on" : "off"));
 	}
 
 	@Override
@@ -54,7 +116,7 @@ public final class DiscordScreen extends Screen {
 
 		// --- top band: enable, URL, test ------------------------------------
 		addDrawableChild(ButtonWidget.builder(enabledLabel(), b -> {
-			config.setDiscordEnabled(!config.discordEnabled());
+			doSetEnabled(!config.discordEnabled());
 			b.setMessage(enabledLabel());
 		}).dimensions(x, y, fw, 20).build());
 		y += 30;
@@ -67,8 +129,8 @@ public final class DiscordScreen extends Screen {
 		y += 26;
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§aSave URL"), b -> {
-			config.setDiscordWebhookUrl(urlDraft.trim());
-			status = "§aURL saved.";
+			doSetWebhookUrl(urlDraft.trim());
+			status = controller != null ? "§aURL sent to bot." : "§aURL saved.";
 		}).dimensions(x, y, 90, 20).build());
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bTest"), b -> testWebhook())
 				.dimensions(x + 94, y, 70, 20).build());
@@ -80,7 +142,7 @@ public final class DiscordScreen extends Screen {
 
 		// --- message style --------------------------------------------------
 		addDrawableChild(ButtonWidget.builder(embedsLabel(), b -> {
-			config.setDiscordUseEmbeds(!config.discordUseEmbeds());
+			doSetUseEmbeds(!config.discordUseEmbeds());
 			b.setMessage(embedsLabel());
 		}).dimensions(x, y, fw, 20).build());
 		y += 30;
@@ -89,7 +151,7 @@ public final class DiscordScreen extends Screen {
 		if (config.pingTarget() == PingTarget.ROLE) {
 			addDrawableChild(ButtonWidget.builder(pingTargetLabel(), b -> {
 				persistRoleDraft();
-				config.setPingTarget(config.pingTarget().next());
+				doSetPingTarget(config.pingTarget().next());
 				rebuild();
 			}).dimensions(x, y, 220, 20).build());
 			roleField = new TextFieldWidget(textRenderer, x + 226, y, fw - 226, 20, Text.literal("role id or name"));
@@ -100,7 +162,7 @@ public final class DiscordScreen extends Screen {
 		} else {
 			roleField = null;
 			addDrawableChild(ButtonWidget.builder(pingTargetLabel(), b -> {
-				config.setPingTarget(config.pingTarget().next());
+				doSetPingTarget(config.pingTarget().next());
 				rebuild();
 			}).dimensions(x, y, fw, 20).build());
 		}
@@ -153,14 +215,14 @@ public final class DiscordScreen extends Screen {
 
 		// Send on/off
 		addDrawableChild(ButtonWidget.builder(sendLabel(e), b -> {
-			config.setDiscordEventEnabled(e, !config.discordEventEnabled(e));
+			doSetEventEnabled(e, !config.discordEventEnabled(e));
 			b.setMessage(sendLabel(e));
 		}).dimensions(bx, y, colW, 20).build());
 		bx += colW + gap;
 
 		// @everyone ping mode (cycles off → outsiders → all; non-scoped skips outsiders)
 		addDrawableChild(ButtonWidget.builder(pingLabel(e), b -> {
-			config.setDiscordEventPing(e, config.discordEventPing(e).next(e.scoped()));
+			doSetEventPing(e, config.discordEventPing(e).next(e.scoped()));
 			b.setMessage(pingLabel(e));
 		}).dimensions(bx, y, colW, 20).build());
 		bx += colW + gap;
@@ -168,7 +230,7 @@ public final class DiscordScreen extends Screen {
 		// Gear (only for detailable events)
 		if (e.detailable()) {
 			addDrawableChild(ButtonWidget.builder(detailsLabel(e), b -> {
-				config.setDiscordEventDetails(e, !config.discordEventDetails(e));
+				doSetEventDetails(e, !config.discordEventDetails(e));
 				b.setMessage(detailsLabel(e));
 			}).dimensions(bx, y, colW, 20).build());
 		} else {
@@ -179,12 +241,12 @@ public final class DiscordScreen extends Screen {
 		// Coords + Distance (only for locatable events)
 		if (e.locatable()) {
 			addDrawableChild(ButtonWidget.builder(coordsLabel(e), b -> {
-				config.setDiscordEventCoords(e, !config.discordEventCoords(e));
+				doSetEventCoords(e, !config.discordEventCoords(e));
 				b.setMessage(coordsLabel(e));
 			}).dimensions(bx, y, colW, 20).build());
 			bx += colW + gap;
 			addDrawableChild(ButtonWidget.builder(distanceLabel(e), b -> {
-				config.setDiscordEventDistance(e, !config.discordEventDistance(e));
+				doSetEventDistance(e, !config.discordEventDistance(e));
 				b.setMessage(distanceLabel(e));
 			}).dimensions(bx, y, colW, 20).build());
 		} else {
@@ -204,7 +266,7 @@ public final class DiscordScreen extends Screen {
 
 	private void testWebhook() {
 		String url = urlDraft.trim();
-		config.setDiscordWebhookUrl(url);
+		doSetWebhookUrl(url);
 		if (!DiscordNotifier.isValidWebhook(url)) {
 			status = "§cInvalid URL — must be a Discord webhook link.";
 			return;
@@ -227,7 +289,7 @@ public final class DiscordScreen extends Screen {
 
 	/** Save the custom-role text (id or name) into the config if the field is showing. */
 	private void persistRoleDraft() {
-		if (roleField != null && roleDraft != null) config.setPingRole(roleDraft.trim());
+		if (roleField != null && roleDraft != null) doSetPingRole(roleDraft.trim());
 	}
 
 	private Text sendLabel(DiscordEvent e) {
@@ -292,7 +354,7 @@ public final class DiscordScreen extends Screen {
 
 	@Override
 	public void close() {
-		config.setDiscordWebhookUrl(urlDraft.trim());
+		doSetWebhookUrl(urlDraft.trim());
 		persistRoleDraft();
 		if (client != null) client.setScreen(parent);
 	}

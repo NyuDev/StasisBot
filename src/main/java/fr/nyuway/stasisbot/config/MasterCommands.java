@@ -4,6 +4,7 @@ import fr.nyuway.stasisbot.i18n.Messages;
 
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Parses and applies the master's chat/DM configuration commands, e.g.
@@ -76,6 +77,30 @@ public final class MasterCommands {
 			case "baritone" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setUseBaritone(v); return set("baritone", on(v)); }
 			case "discord" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordEnabled(v); return set("discord", on(v)); }
 			case "embeds" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setDiscordUseEmbeds(v); return set("embeds", on(v)); }
+			case "discordwebhook" -> {
+				if (value == null || value.isBlank()) return bad(key);
+				if (!value.startsWith("https://")) return bad(key);
+				config.setDiscordWebhookUrl(value.trim());
+				return set("discordwebhook", "set");
+			}
+			case "pingtarget" -> {
+				if (value == null) return bad(key);
+				Optional<PingTarget> pt = switch (value.toLowerCase(Locale.ROOT)) {
+					case "everyone" -> Optional.of(PingTarget.EVERYONE);
+					case "here"     -> Optional.of(PingTarget.HERE);
+					case "role"     -> Optional.of(PingTarget.ROLE);
+					default         -> Optional.empty();
+				};
+				if (pt.isEmpty()) return bad(key);
+				config.setPingTarget(pt.get());
+				return set("pingtarget", pt.get().name().toLowerCase(Locale.ROOT));
+			}
+			case "pingrole" -> {
+				if (value == null || value.isBlank()) return bad(key);
+				config.setPingRole(value.trim());
+				return set("pingrole", value.trim());
+			}
+			case "discordevent" -> { return discordEvent(config, parts); }
 			case "skip" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setSkipIfPresent(v); return set("skip", on(v)); }
 			case "lockhome" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setLockAtHome(v); return set("lockhome", on(v)); }
 			default -> { return Result.of(Messages.Key.CFG_UNKNOWN, key); }
@@ -142,6 +167,50 @@ public final class MasterCommands {
 				return set("watch", config.watchedPlayersDisplay());
 			}
 		}
+	}
+
+	private static Result discordEvent(StasisBotConfig config, String[] parts) {
+		// !sb discordevent <event-key> <sub> <value>
+		// e.g. !sb discordevent player_enter send on
+		if (parts.length < 5) return bad("discordevent");
+		DiscordEvent event = DiscordEvent.byKey(parts[2]);
+		if (event == null) return bad("discordevent");
+		String sub = parts[3].toLowerCase(Locale.ROOT);
+		String val = parts[4].toLowerCase(Locale.ROOT);
+		return switch (sub) {
+			case "send" -> {
+				Boolean v = bool(val); if (v == null) yield bad("discordevent");
+				config.setDiscordEventEnabled(event, v);
+				yield set("discordevent", event.key() + " send " + on(v));
+			}
+			case "ping" -> {
+				Optional<PingMode> pm = switch (val) {
+					case "off"             -> Optional.of(PingMode.OFF);
+					case "outsiders","out" -> Optional.of(PingMode.OUTSIDERS);
+					case "all"             -> Optional.of(PingMode.ALL);
+					default                -> Optional.empty();
+				};
+				if (pm.isEmpty()) yield bad("discordevent");
+				config.setDiscordEventPing(event, pm.get());
+				yield set("discordevent", event.key() + " ping " + pm.get().name().toLowerCase(Locale.ROOT));
+			}
+			case "coords", "xyz" -> {
+				Boolean v = bool(val); if (v == null) yield bad("discordevent");
+				config.setDiscordEventCoords(event, v);
+				yield set("discordevent", event.key() + " coords " + on(v));
+			}
+			case "dist", "distance" -> {
+				Boolean v = bool(val); if (v == null) yield bad("discordevent");
+				config.setDiscordEventDistance(event, v);
+				yield set("discordevent", event.key() + " dist " + on(v));
+			}
+			case "details", "gear" -> {
+				Boolean v = bool(val); if (v == null) yield bad("discordevent");
+				config.setDiscordEventDetails(event, v);
+				yield set("discordevent", event.key() + " details " + on(v));
+			}
+			default -> bad("discordevent");
+		};
 	}
 
 	private static Result returnPos(StasisBotConfig config, String[] parts) {

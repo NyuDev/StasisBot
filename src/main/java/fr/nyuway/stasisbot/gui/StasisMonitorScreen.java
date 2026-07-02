@@ -238,7 +238,7 @@ public final class StasisMonitorScreen extends Screen {
 		y += step;
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§dDiscord…"),
-				b -> { if (client != null) client.setScreen(new DiscordScreen(this, config)); })
+				b -> { if (client != null) client.setScreen(new DiscordScreen(this, config, remote)); })
 				.dimensions(x, y, bw, bh).build());
 		y += step;
 

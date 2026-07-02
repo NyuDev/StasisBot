@@ -34,7 +34,9 @@ public final class ControlCore {
 		kv(sb, "alert", config.alertOutsiders());
 		kv(sb, "chatlog", config.logAllChat());
 		kv(sb, "appendchars", config.appendRandomChars());
-		sb.append("lang=").append(config.language());
+		sb.append("lang=").append(config.language()).append(';');
+		// Webhook URL last — it contains '/' which is safe, but avoid putting it mid-list.
+		sb.append("discordwebhook=").append(config.discordWebhookUrl());
 		return sb.toString();
 	}
 
