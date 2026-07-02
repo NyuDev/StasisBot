@@ -3,6 +3,7 @@ package fr.nyuway.stasisbot.service;
 import fr.nyuway.stasisbot.StasisBot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.screen.multiplayer.ConnectScreen;
 import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.network.ServerInfo;
@@ -27,10 +28,19 @@ public final class AutoReconnect {
 	/** Ticks between connection attempts while disconnected (20 ticks = 1s). */
 	private static final int RETRY_TICKS = 20 * 30;
 
+	/**
+	 * If the ConnectScreen stays visible this long without the network handler
+	 * becoming non-null, the connection attempt has stalled (e.g. a NPE in
+	 * ConnectScreen's connector thread silently killed the error-display path).
+	 * Force back to title screen so the normal retry cycle can fire.
+	 */
+	private static final int MAX_CONNECT_SCREEN_TICKS = 20 * 45; // 45 s
+
 	private final MinecraftClient client;
 	private volatile String server;
 	private volatile boolean enabled = true;
 	private int cooldown = 0;
+	private int connectScreenTicks = 0;
 
 	public AutoReconnect(MinecraftClient client) {
 		this.client = client;
@@ -63,6 +73,7 @@ public final class AutoReconnect {
 			return; // not a headless run, or auto-reconnect disabled; leave it alone
 		}
 		if (client.world != null || client.getNetworkHandler() != null) {
+			connectScreenTicks = 0;
 			return; // already in-game / queued / connecting at the play level
 		}
 		// Still loading (the splash/loading overlay is up, no screen yet): wait.
@@ -71,8 +82,20 @@ public final class AutoReconnect {
 		}
 		Screen screen = client.currentScreen;
 		if (screen == null || screen instanceof ConnectScreen) {
+			if (screen instanceof ConnectScreen) {
+				// Guard against the ConnectScreen getting stuck (e.g. a NPE in the
+				// connector thread that kills the error-display path before the screen
+				// can transition to the disconnect/title screen).
+				if (++connectScreenTicks > MAX_CONNECT_SCREEN_TICKS) {
+					StasisBot.LOGGER.warn("[auto-connect] ConnectScreen stuck for {}s without connecting — forcing title screen",
+							MAX_CONNECT_SCREEN_TICKS / 20);
+					client.setScreen(new TitleScreen());
+					connectScreenTicks = 0;
+				}
+			}
 			return; // a connection attempt is already in progress
 		}
+		connectScreenTicks = 0;
 		if (cooldown > 0) {
 			cooldown--;
 			return;
