@@ -11,10 +11,12 @@ package fr.nyuway.stasisbot.service;
  */
 public final class BotDeathInfo {
 
-	private static final long FRESH_MILLIS = 5_000L;
+	/** Generous window: 2b2t respawn queues can take 10–20 s after the death message. */
+	private static final long FRESH_MILLIS = 30_000L;
 
 	private volatile String reason;
 	private volatile long at;
+	private volatile java.util.List<String> nearbyAtDeath = java.util.List.of();
 
 	/** Record the cause the chat watcher parsed for the bot's own death. */
 	public void record(String reason) {
@@ -22,7 +24,12 @@ public final class BotDeathInfo {
 		this.at = System.currentTimeMillis();
 	}
 
-	/** The cause if one was captured in the last few seconds, otherwise {@code null}. */
+	/** Record the player names visible in render distance at the moment of death. */
+	public void recordNearby(java.util.List<String> names) {
+		this.nearbyAtDeath = java.util.List.copyOf(names);
+	}
+
+	/** The cause if one was captured recently, otherwise {@code null}. */
 	public String recentReason() {
 		String r = reason;
 		if (r == null) return null;
@@ -30,9 +37,16 @@ public final class BotDeathInfo {
 		return r;
 	}
 
-	/** Forget any stored reason (called once it's been consumed). */
+	/** Players that were in render distance when the bot died, or an empty list. */
+	public java.util.List<String> recentNearby() {
+		if (System.currentTimeMillis() - at > FRESH_MILLIS) return java.util.List.of();
+		return nearbyAtDeath;
+	}
+
+	/** Forget all stored state (called once it's been consumed). */
 	public void clear() {
 		this.reason = null;
 		this.at = 0L;
+		this.nearbyAtDeath = java.util.List.of();
 	}
 }

@@ -161,12 +161,13 @@ final class DeathRespawnController {
 		return false;
 	}
 
-	/** Announce the pending bot-death now (with the parsed cause if any), exactly once. */
+	/** Announce the pending bot-death now (with the parsed cause + nearby players if any), exactly once. */
 	private void flushDeathAnnounce() {
 		if (!deathAnnouncePending) return;
 		deathAnnouncePending = false;
 		String reason = deathInfo != null ? deathInfo.recentReason() : null;
-		owner.announceGlobal(DiscordEvent.BOT_DIED, DiscordText.died(config.language(), reason));
+		java.util.List<String> nearby = deathInfo != null ? deathInfo.recentNearby() : java.util.List.of();
+		owner.announceGlobal(DiscordEvent.BOT_DIED, DiscordText.died(config.language(), reason, nearby));
 		if (deathInfo != null) deathInfo.clear();
 	}
 

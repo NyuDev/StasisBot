@@ -12,6 +12,8 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -108,7 +110,19 @@ public final class DeathWatcher {
 		// The bot itself: stash the cause so the BOT_DIED announcement can quote it.
 		// This must run regardless of the PLAYER_DIED toggle (it's a different event).
 		if (selfName != null && victim.equalsIgnoreCase(selfName)) {
-			if (deathInfo != null) deathInfo.record(causePhrase(line, victim));
+			if (deathInfo != null) {
+				deathInfo.record(causePhrase(line, victim));
+				// Capture who was in render distance at the moment of death.
+				ClientWorld world = client.world;
+				if (world != null) {
+					List<String> nearby = new ArrayList<>();
+					for (PlayerEntity p : world.getPlayers()) {
+						String name = p.getGameProfile().name();
+						if (!name.equalsIgnoreCase(selfName)) nearby.add(name);
+					}
+					deathInfo.recordNearby(nearby);
+				}
+			}
 			feedback.debug("bot death message captured: " + line);
 			return;
 		}

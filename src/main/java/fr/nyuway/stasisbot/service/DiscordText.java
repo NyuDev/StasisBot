@@ -235,6 +235,16 @@ final class DiscordText {
 				: "\uD83D\uDC80 The bot died: " + reason;
 	}
 
+	/** Bot-died line with cause + optional list of players that were nearby at time of death. */
+	static String died(String lang, String reason, java.util.List<String> nearby) {
+		String base = died(lang, reason);
+		if (nearby == null || nearby.isEmpty()) return base;
+		String names = String.join(", ", nearby);
+		return base + (fr(lang)
+				? "\n\uD83D\uDC41\uFE0F Proches au moment de la mort : **" + names + "**"
+				: "\n\uD83D\uDC41\uFE0F Nearby at time of death: **" + names + "**");
+	}
+
 	static String respawned(String lang) {
 		return fr(lang)
 				? "\u267B Le bot a r\u00e9apparu et rentre \u00e0 la base."
