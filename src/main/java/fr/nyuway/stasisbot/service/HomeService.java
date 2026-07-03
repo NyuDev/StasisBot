@@ -252,34 +252,64 @@ public final class HomeService {
 
 	// --- remote control (called on the client thread by the control API) --------
 
-	/** Walk the bot to fixed coordinates (ignored while it's busy serving a request). */
-	public void remoteGoto(int x, int y, int z) {
-		if (!isBusy()) startManual(new BlockPos(x, y, z));
+	/**
+	 * Force the bot out of whatever it is doing so an explicit operator command from the
+	 * control panel takes over immediately. Without this, a bot stuck mid-navigation — a
+	 * RETURN/MANUAL/RESTOCK walk that never completes (common on 2b2t's unstable chunks) —
+	 * makes every phase-gated remote command silently no-op, and its stuck tick keeps
+	 * re-issuing navigation that fights an operator's Baritone follow. An operator button
+	 * press is a deliberate override; it must always win. Returns the bot to a clean IDLE.
+	 */
+	public void forceIdle() {
+		if (phase != Phase.IDLE || !requests.isEmpty()) {
+			StasisBot.LOGGER.info("[control] operator command preempts {} (queued: {})", phase, requests.size());
+		}
+		navigator.stop(client);
+		if (phase == Phase.RESTOCK) restock.abort();
+		requests.clear();
+		bedTarget = null;
+		finishCurrent(); // clears per-request state and drops phase to IDLE
 	}
 
-	/** Walk the bot to the named player's current position, if visible and not busy. */
+	/** Walk the bot to fixed coordinates (preempts any current work). */
+	public void remoteGoto(int x, int y, int z) {
+		forceIdle();
+		startManual(new BlockPos(x, y, z));
+		StasisBot.LOGGER.info("[control] goto {} {} {}", x, y, z);
+	}
+
+	/** Walk the bot to the named player's current position, if that player is in render. */
 	public void remoteCome(String name) {
-		if (name == null || client.world == null || isBusy()) return;
+		if (name == null || client.world == null) return;
 		for (var p : client.world.getPlayers()) {
 			if (name.equalsIgnoreCase(p.getGameProfile().name())) {
+				forceIdle();
 				startManual(p.getBlockPos());
+				StasisBot.LOGGER.info("[control] come to '{}'", name);
 				return;
 			}
 		}
+		StasisBot.LOGGER.info("[control] come '{}' ignored — player not in render", name);
 	}
 
-	/** Cancel any master-directed move. */
+	/** Cancel whatever the bot is doing and return it to idle (the panel's Stop button). */
 	public void remoteStop() {
-		stopManual();
+		forceIdle();
 	}
 
-	/** Walk the bot back to its pinned home and settle (centre + facing), when idle. */
+	/** Walk the bot back to its pinned home and settle (centre + facing). Preempts current work. */
 	public void remoteGoHome() {
-		if (!config.hasReturnPos() || phase != Phase.IDLE || client.player == null) return;
+		if (client.player == null) return;
+		if (!config.hasReturnPos()) {
+			StasisBot.LOGGER.info("[control] go-home ignored — no home is set (use Set home here first)");
+			return;
+		}
+		forceIdle();
 		returnTarget = new BlockPos(config.returnX(), config.returnY(), config.returnZ());
 		anchor.markMoved(); // so startReturn/arriveHome treat this as a real trip
 		navigator.startExact(returnTarget);
 		phase = Phase.RETURN;
+		StasisBot.LOGGER.info("[control] go-home");
 	}
 
 	/** True when the bot is standing on its pinned home block (for the remote panel's indicator). */
@@ -301,11 +331,13 @@ public final class HomeService {
 		return false;
 	}
 
-	/** Walk the bot to a bed and right-click it to set its spawn there (when idle). */
+	/** Walk the bot to a bed and right-click it to set its spawn there. Preempts current work. */
 	public void remoteUseBed(int x, int y, int z) {
-		if (phase != Phase.IDLE || client.player == null) return;
+		if (client.player == null) return;
+		forceIdle();
 		bedTarget = new BlockPos(x, y, z);
 		startManual(bedTarget); // walk there; the per-tick reach check fires the interact
+		StasisBot.LOGGER.info("[control] use-bed {} {} {}", x, y, z);
 	}
 
 	/** Get up if the bot is asleep — it must stay active. */
@@ -337,18 +369,26 @@ public final class HomeService {
 		StasisBot.LOGGER.info("[bed] set spawn via bed at {}", lastBed.toShortString());
 	}
 
-	/** Walk the bot to the last bed it set as its spawn (when idle). */
+	/** Walk the bot to the last bed it set as its spawn. Preempts current work. */
 	public void remoteGoSpawn() {
-		if (lastBed == null || phase != Phase.IDLE) return;
+		if (lastBed == null) {
+			StasisBot.LOGGER.info("[control] go-spawn ignored — no bed set this session (use Set bot bed first)");
+			return;
+		}
+		forceIdle();
 		startManual(lastBed);
+		StasisBot.LOGGER.info("[control] go-spawn to {}", lastBed.toShortString());
 	}
 
-	/** Trigger a pearl restock from a chest next to the bot's current position (when idle). */
+	/** Trigger a pearl restock from a chest next to the bot's current position. Preempts current work. */
 	public void remoteRestock() {
-		if (phase != Phase.IDLE) return;
+		forceIdle();
 		if (restock.begin()) {
 			feedback.debug("remote restock — pulling pearls from a nearby chest");
 			phase = Phase.RESTOCK;
+			StasisBot.LOGGER.info("[control] restock started");
+		} else {
+			StasisBot.LOGGER.info("[control] restock ignored — no chest with pearls beside the bot");
 		}
 	}
 

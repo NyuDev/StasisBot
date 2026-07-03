@@ -171,6 +171,9 @@ public final class StasisBotClient implements ClientModInitializer {
 					@Override public void goTo(int x, int y, int z) { homeService.remoteGoto(x, y, z); }
 					@Override public void come(String player) { homeService.remoteCome(player); }
 					@Override public void follow(String player) {
+						// Clear any stuck HomeService phase first, else its tick keeps re-issuing
+						// navigation every frame and fights (overrides) the Baritone follow below.
+						homeService.forceIdle();
 						if (fr.nyuway.stasisbot.activation.BaritoneSupport.isAvailable())
 							fr.nyuway.stasisbot.activation.BaritoneFollow.followPlayer(player);
 						else homeService.remoteCome(player);
