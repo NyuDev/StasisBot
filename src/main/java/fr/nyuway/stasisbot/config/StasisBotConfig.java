@@ -98,6 +98,10 @@ public final class StasisBotConfig {
 	/** Optional facing (yaw/pitch) to settle into at the return position; null = keep the start facing. */
 	private Float returnYaw = null;
 	private Float returnPitch = null;
+	/** Last bed the bot set as its spawn, persisted so "Go to spawn" survives a restart. */
+	private Integer bedX = null;
+	private Integer bedY = null;
+	private Integer bedZ = null;
 	/** Don't teleport a player who isn't in the server player list. */
 	private boolean requireOnline = true;
 	/** Don't teleport a player who is already within the bot's render distance (already at base). */
@@ -271,6 +275,10 @@ public final class StasisBotConfig {
 	public Float returnPitch() { return returnPitch; }
 	public boolean hasReturnFacing() { return returnYaw != null && returnPitch != null; }
 	public boolean hasReturnPos() { return returnX != null && returnY != null && returnZ != null; }
+	public Integer bedX() { return bedX; }
+	public Integer bedY() { return bedY; }
+	public Integer bedZ() { return bedZ; }
+	public boolean hasBedSpawn() { return bedX != null && bedY != null && bedZ != null; }
 	public boolean requireOnline() { return requireOnline; }
 	public boolean skipIfPresent() { return skipIfPresent; }
 	public boolean lockAtHome() { return lockAtHome; }
@@ -363,6 +371,8 @@ public final class StasisBotConfig {
 	public void setReturnPos(int x, int y, int z, float yaw, float pitch) {
 		this.returnX = x; this.returnY = y; this.returnZ = z; this.returnYaw = yaw; this.returnPitch = pitch; save();
 	}
+	/** Remember the bed the bot just slept in as its spawn, so "Go to spawn" survives a restart. */
+	public void setBedSpawn(int x, int y, int z) { this.bedX = x; this.bedY = y; this.bedZ = z; save(); }
 	public void setReturnHomeOnDeath(boolean v) { this.returnHomeOnDeath = v; save(); }
 	public void setDiscordEnabled(boolean v) { this.discordEnabled = v; save(); }
 	public void setDiscordWebhookUrl(String v) { this.discordWebhookUrl = v == null ? "" : v.trim(); save(); }
@@ -692,6 +702,9 @@ public final class StasisBotConfig {
 		this.returnZ = o.returnZ;
 		this.returnYaw = o.returnYaw;
 		this.returnPitch = o.returnPitch;
+		this.bedX = o.bedX;
+		this.bedY = o.bedY;
+		this.bedZ = o.bedZ;
 		this.requireOnline = o.requireOnline;
 		this.skipIfPresent = o.skipIfPresent;
 		this.lockAtHome = o.lockAtHome;

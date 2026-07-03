@@ -364,20 +364,32 @@ public final class HomeService {
 		}
 		feedback.debug("bed: interacted to set spawn at " + bedTarget.toShortString());
 		lastBed = bedTarget;
+		config.setBedSpawn(lastBed.getX(), lastBed.getY(), lastBed.getZ()); // survive a restart
 		bedTarget = null;
 		stopManual();
 		StasisBot.LOGGER.info("[bed] set spawn via bed at {}", lastBed.toShortString());
 	}
 
+	/** The remembered bed spawn: the one set this session, else the one persisted in config. */
+	private BlockPos bedSpawn() {
+		if (lastBed != null) return lastBed;
+		if (config.hasBedSpawn()) {
+			lastBed = new BlockPos(config.bedX(), config.bedY(), config.bedZ());
+			return lastBed;
+		}
+		return null;
+	}
+
 	/** Walk the bot to the last bed it set as its spawn. Preempts current work. */
 	public void remoteGoSpawn() {
-		if (lastBed == null) {
-			StasisBot.LOGGER.info("[control] go-spawn ignored — no bed set this session (use Set bot bed first)");
+		BlockPos bed = bedSpawn();
+		if (bed == null) {
+			StasisBot.LOGGER.info("[control] go-spawn ignored — no bed set yet (use Set bot bed first)");
 			return;
 		}
 		forceIdle();
-		startManual(lastBed);
-		StasisBot.LOGGER.info("[control] go-spawn to {}", lastBed.toShortString());
+		startManual(bed);
+		StasisBot.LOGGER.info("[control] go-spawn to {}", bed.toShortString());
 	}
 
 	/** Trigger a pearl restock from a chest next to the bot's current position. Preempts current work. */
