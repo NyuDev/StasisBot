@@ -50,6 +50,10 @@ public final class PlayerWatcher {
 
 	private final Set<String> present = new HashSet<>();
 	private final Set<String> prevTab = new HashSet<>();   // who was online last tick (to split connect vs walk-in)
+	/** Last-seen gear string per player — populated on every scan, consumed on leave/disconnect. */
+	private final Map<String, String> gearCache = new HashMap<>();
+	/** Last-seen block position per player — same lifecycle as gearCache. */
+	private final Map<String, BlockPos> posCache = new HashMap<>();
 	private boolean primed = false;   // skip the first diff so joining doesn't spam every nearby player
 	private long lastCheck = 0L;
 
@@ -89,6 +93,9 @@ public final class PlayerWatcher {
 			String name = p.getGameProfile().name();
 			if (name == null || name.equalsIgnoreCase(selfName)) continue;
 			near.put(name, p);
+			// Refresh cache so leave/disconnect can report last-known gear and position.
+			gearCache.put(name, formatGear(p));
+			posCache.put(name, p.getBlockPos());
 			if (presence != null) presence.markSeen(name);
 			if (!isBaseMember(name)) outsiderHere = true;
 		}
@@ -148,12 +155,18 @@ public final class PlayerWatcher {
 				boolean disconnected = !tab.contains(name);   // no longer online → left the server
 				DiscordEvent ev = disconnected ? DiscordEvent.PLAYER_DISCONNECT : DiscordEvent.PLAYER_LEAVE;
 				if (!config.discordEventEnabled(ev)) continue;
+				// Use last-known gear and position (player entity is already gone from near).
+				String gear = config.discordEventDetails(ev) ? gearCache.get(name) : null;
 				String msg = disconnected
-						? DiscordText.disconnected(config.language(), name)
-						: DiscordText.leave(config.language(), name);
+						? DiscordText.disconnectedGear(config.language(), name, gear)
+						: DiscordText.leaveGear(config.language(), name, gear);
+				BlockPos pos = posCache.get(name);
+				int dist = pos != null ? Proximity.distanceTo(self, pos) : -1;
 				feedback.debug("saw '" + name + "' " + (disconnected ? "DISCONNECT" : "LEAVE")
 						+ " (" + (outsider ? "outsider" : "base member") + ")");
-				discord.notify(ev, outsider, msg);
+				discord.notify(ev, outsider, msg, pos, dist);
+				gearCache.remove(name);
+				posCache.remove(name);
 			}
 		}
 
@@ -166,6 +179,8 @@ public final class PlayerWatcher {
 	private void reset() {
 		present.clear();
 		prevTab.clear();
+		gearCache.clear();
+		posCache.clear();
 		primed = false;
 		if (presence != null) presence.setOutsiderPresent(false);
 	}
