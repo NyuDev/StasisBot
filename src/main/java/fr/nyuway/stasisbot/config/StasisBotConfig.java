@@ -592,6 +592,18 @@ public final class StasisBotConfig {
 		return removed;
 	}
 
+	/**
+	 * Replace the watch list with the one received from a remote snapshot.
+	 * Does not save to disk (this is a live sync, not a user change).
+	 */
+	public void syncWatchedPlayersFromRemote(List<String> players) {
+		watchedPlayers = players == null ? new ArrayList<>() : players.stream()
+				.filter(s -> s != null && !s.isBlank() && isValidMinecraftName(s.trim()))
+				.map(s -> s.trim().toLowerCase(Locale.ROOT))
+				.distinct()
+				.collect(Collectors.toCollection(ArrayList::new));
+	}
+
 	/** Lower-case, trim, drop blanks and de-duplicate a list of trigger words. */
 	private static List<String> cleanWords(List<String> words) {
 		if (words == null) return new ArrayList<>();

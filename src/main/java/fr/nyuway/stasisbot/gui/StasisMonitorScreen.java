@@ -202,7 +202,7 @@ public final class StasisMonitorScreen extends Screen {
 		int bw = 150;
 		int x = width - bw - 20;
 		int top = 28;
-		int count = 17;
+		int count = 18;
 		int avail = height - top - 34;
 		int step = Math.max(15, Math.min(22, avail / count));
 		int bh = Math.min(20, step - 2);
@@ -234,6 +234,11 @@ public final class StasisMonitorScreen extends Screen {
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("§bTrigger words…"),
 				b -> { if (client != null) client.setScreen(new TriggerWordsScreen(this, config)); })
+				.dimensions(x, y, bw, bh).build());
+		y += step;
+
+		addDrawableChild(ButtonWidget.builder(Text.literal("§bWatch list…"),
+				b -> { if (client != null) client.setScreen(new WatchScreen(this, config, remote)); })
 				.dimensions(x, y, bw, bh).build());
 		y += step;
 

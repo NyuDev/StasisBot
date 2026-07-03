@@ -237,6 +237,12 @@ public final class ControllerService {
 		}
 		state.clear();
 		state.putAll(fresh);
+		// Sync the global watch list from the bot so the WatchScreen shows current state.
+		String watched = fresh.get("watched");
+		if (watched != null) {
+			List<String> botList = watched.isEmpty() ? List.of() : List.of(watched.split(","));
+			config.syncWatchedPlayersFromRemote(botList);
+		}
 	}
 
 	private String endpointUrl() {
