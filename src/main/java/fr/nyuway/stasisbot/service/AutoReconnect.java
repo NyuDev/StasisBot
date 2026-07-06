@@ -36,11 +36,27 @@ public final class AutoReconnect {
 	 */
 	private static final int MAX_CONNECT_SCREEN_TICKS = 20 * 45; // 45 s
 
+	/**
+	 * After this many back-to-back connection attempts that never reach a world,
+	 * assume the Minecraft session token has expired mid-run (the join call keeps
+	 * returning HTTP 401 — "Failed to retrieve profile key pair") and no amount of
+	 * in-process retrying will recover it. DevAuth only mints a token at launch, so
+	 * the cure is a fresh process: quit the JVM and let Docker's {@code restart:
+	 * unless-stopped} bring the container back up, where DevAuth silently refreshes
+	 * the token from the stored Microsoft refresh token and the bot rejoins on its
+	 * own. Reset to 0 the moment a connection actually succeeds, so ordinary 2b2t
+	 * disconnects (queue drops, kicks) never trip it — only a truly dead session,
+	 * which fails every single attempt, climbs this far. 20 attempts x 30 s ≈ 10 min.
+	 */
+	private static final int MAX_FAILED_ATTEMPTS = 20;
+
 	private final MinecraftClient client;
 	private volatile String server;
 	private volatile boolean enabled = true;
 	private int cooldown = 0;
 	private int connectScreenTicks = 0;
+	private int failedAttempts = 0;
+	private boolean restartRequested = false;
 
 	public AutoReconnect(MinecraftClient client) {
 		this.client = client;
@@ -66,7 +82,7 @@ public final class AutoReconnect {
 	public void setEnabled(boolean e) { this.enabled = e; }
 
 	/** Connect on the very next tick (used by remote connect/reconnect). */
-	public void connectNow() { this.enabled = true; this.cooldown = 0; }
+	public void connectNow() { this.enabled = true; this.cooldown = 0; this.failedAttempts = 0; }
 
 	public void tick() {
 		if (server == null || !enabled) {
@@ -74,6 +90,7 @@ public final class AutoReconnect {
 		}
 		if (client.world != null || client.getNetworkHandler() != null) {
 			connectScreenTicks = 0;
+			failedAttempts = 0; // a real connection: the session is valid, reset the dead-session counter
 			return; // already in-game / queued / connecting at the play level
 		}
 		// Still loading (the splash/loading overlay is up, no screen yet): wait.
@@ -101,7 +118,30 @@ public final class AutoReconnect {
 			return;
 		}
 		cooldown = RETRY_TICKS;
+		if (++failedAttempts > MAX_FAILED_ATTEMPTS) {
+			requestRestart();
+			return;
+		}
 		connect();
+	}
+
+	/**
+	 * Quit the JVM so Docker ({@code restart: unless-stopped}) recreates the container
+	 * and DevAuth re-mints a fresh session token. A no-op on a desktop run — there the
+	 * process wouldn't be restarted, so we just log and keep retrying instead.
+	 */
+	private void requestRestart() {
+		if (restartRequested) return;
+		restartRequested = true;
+		StasisBot.LOGGER.error("[auto-connect] {} connection attempts failed with no success — the session token "
+				+ "has likely expired. Quitting so the container restarts and DevAuth re-authenticates.",
+				MAX_FAILED_ATTEMPTS);
+		if (System.getenv("STASIS_SERVER") == null) {
+			restartRequested = false;
+			failedAttempts = 0; // desktop run: nothing will restart us, so just keep trying
+			return;
+		}
+		client.scheduleStop();
 	}
 
 	private void connect() {
