@@ -1,4 +1,5 @@
 {
 	"key.category.stasisbot.main": "StasisBot",
-	"key.stasisbot.open_menu": "Ouvrir le menu StasisBot"
+	"key.stasisbot.open_menu": "Ouvrir le menu StasisBot",
+	"key.stasisbot.home_request": "Demander un retour (me ramener via stasis)"
 }

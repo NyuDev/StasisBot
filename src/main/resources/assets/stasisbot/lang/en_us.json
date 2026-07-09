@@ -1,4 +1,5 @@
 {
 	"key.category.stasisbot.main": "StasisBot",
-	"key.stasisbot.open_menu": "Open StasisBot menu"
+	"key.stasisbot.open_menu": "Open StasisBot menu",
+	"key.stasisbot.home_request": "Request home (pull me in via stasis)"
 }
