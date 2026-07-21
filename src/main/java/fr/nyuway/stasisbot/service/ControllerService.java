@@ -38,7 +38,15 @@ public final class ControllerService {
 		return t;
 	});
 
+	/**
+	 * Hard floor between two auto-refreshes, whatever age the caller asks for. Opening and
+	 * closing the panel repeatedly must never turn into a request storm against the bot.
+	 */
+	private static final long MIN_AUTO_REFRESH_MILLIS = 2_000L;
+
 	private volatile ControlProtocol proto;
+	private volatile long lastStateAt = 0L;       // when a STATE frame last landed (cache age)
+	private volatile long lastAutoRefreshAt = 0L; // when an auto-refresh was last sent (anti-spam)
 	private final Map<String, String> state = new LinkedHashMap<>();
 	private volatile List<RemoteChamber> chambers = new ArrayList<>();
 	private volatile Status status = Status.IDLE;
@@ -138,6 +146,7 @@ public final class ControllerService {
 		status = Status.IDLE;
 		info = "disconnected";
 		state.clear();
+		lastStateAt = 0L; // nothing cached any more — the next open must re-sync
 		chambers = new ArrayList<>();
 	}
 
@@ -148,8 +157,29 @@ public final class ControllerService {
 
 	public void refresh() {
 		if (!ready()) return;
+		lastAutoRefreshAt = System.currentTimeMillis();
 		request("GET", "");
 		request("CHAMBERS", "");
+	}
+
+	/**
+	 * Pull fresh state from the bot, but only when what we hold is older than
+	 * {@code maxAgeMillis}. Opening the panel calls this so the view is never stale, while
+	 * re-opening it moments later just reuses the cached snapshot. A second, absolute floor
+	 * ({@link #MIN_AUTO_REFRESH_MILLIS}) guards against menu open/close spam even when the
+	 * cache is genuinely old, so the bot can't be hammered.
+	 */
+	public void refreshIfStale(long maxAgeMillis) {
+		if (!ready()) return;
+		long now = System.currentTimeMillis();
+		if (now - lastStateAt < maxAgeMillis) return;            // cache still fresh enough
+		if (now - lastAutoRefreshAt < MIN_AUTO_REFRESH_MILLIS) return; // one just went out
+		refresh();
+	}
+
+	/** How stale the cached snapshot is, in ms ({@link Long#MAX_VALUE} when never synced). */
+	public long stateAgeMillis() {
+		return lastStateAt == 0L ? Long.MAX_VALUE : System.currentTimeMillis() - lastStateAt;
 	}
 
 	/** Ask the bot for its detected chambers (used for the live list). */
@@ -237,6 +267,8 @@ public final class ControllerService {
 		}
 		state.clear();
 		state.putAll(fresh);
+		lastStateAt = System.currentTimeMillis(); // the cache is now fresh
+
 		// Sync the global watch list from the bot so the WatchScreen shows current state.
 		String watched = fresh.get("watched");
 		if (watched != null) {

@@ -57,6 +57,13 @@ public final class StasisMonitorScreen extends Screen {
 	/** Where the remote "Detected chambers" header sits; the chamber buttons start just under it. */
 	private static final int CHAMBER_HEADER_Y = 156;
 
+	/**
+	 * Opening the panel re-syncs from the bot when the cached snapshot is older than this.
+	 * Short enough that what you see is always current, long enough that closing and
+	 * re-opening the menu reuses the cache instead of firing another round-trip.
+	 */
+	private static final long MENU_OPEN_MAX_AGE_MILLIS = 5_000L;
+
 	private String lastSignature = "";
 	private String remoteChamberSig = "";
 	private long lastRefresh = 0L;
@@ -117,6 +124,10 @@ public final class StasisMonitorScreen extends Screen {
 		remoteGated.clear();
 		buildToggles();
 		if (remote()) {
+			// Opening the panel pulls fresh state from the bot, exactly like "Refresh from
+			// bot" — the view must never show a stale snapshot. refreshIfStale reuses the
+			// cache when it was just synced, so open/close spam can't flood the bot.
+			remote.refreshIfStale(MENU_OPEN_MAX_AGE_MILLIS);
 			buildConnectionPanel();
 			buildRemoteChamberButtons();
 			remoteChamberSig = remoteChamberSignature();

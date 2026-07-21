@@ -26,11 +26,17 @@ import java.util.function.Supplier;
  */
 public final class ControlHttpServer {
 
+	/** How often the watchdog checks that the control API still answers. */
+	private static final long WATCHDOG_PERIOD_MILLIS = 30_000L;
+	/** Connect/read timeout for the watchdog's self-probe. */
+	private static final int PROBE_TIMEOUT_MILLIS = 4_000;
+
 	private final StasisBotConfig config;
 	private final ControlProtocol proto;
 	private final int port;
 	private final BotIntrospection intro; // null when no live world info is available
-	private HttpServer server;
+	private volatile HttpServer server;
+	private volatile Thread watchdog;
 
 	public ControlHttpServer(StasisBotConfig config) {
 		this(config, null);
@@ -48,24 +54,87 @@ public final class ControlHttpServer {
 			StasisBot.LOGGER.info("[control] HTTP API disabled (no controlSecret set)");
 			return;
 		}
+		if (bind()) proto.selfTest();
+		startWatchdog();
+	}
+
+	/** Create and start the HTTP server; true when it is listening. */
+	private synchronized boolean bind() {
 		try {
-			server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-			server.createContext("/ctl", this::handle);
-			server.createContext("/ping", ex -> respondText(ex, 200, "stasisbot"));
-			server.setExecutor(Executors.newSingleThreadExecutor(r -> {
+			HttpServer s = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+			s.createContext("/ctl", this::handle);
+			s.createContext("/ping", ex -> respondText(ex, 200, "stasisbot"));
+			s.setExecutor(Executors.newSingleThreadExecutor(r -> {
 				Thread t = new Thread(r, "StasisBot-Control-HTTP");
 				t.setDaemon(true);
 				return t;
 			}));
-			server.start();
-			proto.selfTest();
+			s.start();
+			server = s;
 			StasisBot.LOGGER.info("[control] HTTP control API listening on 0.0.0.0:{}/ctl", port);
+			return true;
 		} catch (Exception e) {
+			server = null;
 			StasisBot.LOGGER.error("[control] failed to start HTTP API on port {}: {}", port, e.toString());
+			return false;
+		}
+	}
+
+	/**
+	 * Watch the control API and bring it back if it ever stops answering. The bot's Minecraft
+	 * client can keep running happily while this endpoint dies, which strands the operator's
+	 * panel on a connection timeout with nothing in the logs. A periodic end-to-end self-probe
+	 * (a real {@code GET /ping}, not just a socket check, so a hung-but-listening server is
+	 * caught too) rebinds it automatically instead of needing a container restart.
+	 */
+	private void startWatchdog() {
+		if (watchdog != null) return;
+		watchdog = new Thread(() -> {
+			while (!Thread.currentThread().isInterrupted()) {
+				try {
+					Thread.sleep(WATCHDOG_PERIOD_MILLIS);
+				} catch (InterruptedException e) {
+					return;
+				}
+				if (selfProbeOk()) continue;
+				StasisBot.LOGGER.warn("[control] API stopped answering on port {} — restarting it", port);
+				try {
+					synchronized (this) {
+						if (server != null) server.stop(0);
+						server = null;
+					}
+				} catch (Exception ignored) {
+					// a dead server may throw on stop; rebinding is what matters
+				}
+				bind();
+			}
+		}, "StasisBot-Control-Watchdog");
+		watchdog.setDaemon(true);
+		watchdog.start();
+	}
+
+	/** True when the endpoint answers its own {@code /ping} — a genuine end-to-end health check. */
+	private boolean selfProbeOk() {
+		if (server == null) return false;
+		try {
+			java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+					java.net.URI.create("http://127.0.0.1:" + port + "/ping").toURL().openConnection();
+			c.setConnectTimeout(PROBE_TIMEOUT_MILLIS);
+			c.setReadTimeout(PROBE_TIMEOUT_MILLIS);
+			c.setRequestMethod("GET");
+			int code = c.getResponseCode();
+			c.disconnect();
+			return code == 200;
+		} catch (Exception e) {
+			return false;
 		}
 	}
 
 	public void stop() {
+		if (watchdog != null) {
+			watchdog.interrupt();
+			watchdog = null;
+		}
 		if (server != null) server.stop(0);
 	}
 

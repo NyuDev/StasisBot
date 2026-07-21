@@ -37,6 +37,12 @@ public final class LogTap {
 			RingAppender appender = new RingAppender();
 			appender.start();
 			core.addAppender(appender);
+			// addAppender gives the StasisBot logger its own LoggerConfig. Without additivity
+			// the events stop propagating to the parent (console/file) appenders, which
+			// silently swallowed every bot log line from the container's output and made
+			// server-side problems undiagnosable. Capture must be *in addition to*, never
+			// instead of, normal logging.
+			core.setAdditive(true);
 			installed = true;
 			StasisBot.LOGGER.info("[logtap] capturing bot logs for the remote panel");
 		} catch (Throwable t) {
