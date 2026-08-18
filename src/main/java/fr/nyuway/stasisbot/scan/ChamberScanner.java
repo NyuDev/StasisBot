@@ -38,7 +38,7 @@ public final class ChamberScanner {
 		List<StasisChamber> chambers = new ArrayList<>();
 		int originChunkX = origin.getX() >> 4;
 		int originChunkZ = origin.getZ() >> 4;
-		int chunkR = config.scanChunkRadius();
+		int chunkR = config.effectiveScanChunkRadius();
 		long maxDistSq = (long) config.maxChamberDistance() * config.maxChamberDistance();
 
 		for (int cx = originChunkX - chunkR; cx <= originChunkX + chunkR; cx++) {
@@ -75,7 +75,7 @@ public final class ChamberScanner {
 				for (int dz = -r; dz <= r; dz++) {
 					cursor.set(signPos.getX() + dx, signPos.getY() + dy, signPos.getZ() + dz);
 					BlockState state = world.getBlockState(cursor);
-					if (!isTrigger(state)) continue;
+					if (!isTriggerBlock(state)) continue;
 					double distSq = cursor.getSquaredDistance(signPos);
 					if (distSq < bestDistSq) {
 						bestDistSq = distSq;
@@ -89,9 +89,10 @@ public final class ChamberScanner {
 
 	/**
 	 * A "trigger" is any block a player can right-click to release the pearl:
-	 * trapdoors (the classic stasis design), doors, levers, or buttons.
+	 * trapdoors (the classic stasis design), doors, levers, or buttons. Public so the
+	 * activator can re-resolve which trapdoor to open when a stasis has several.
 	 */
-	private static boolean isTrigger(BlockState state) {
+	public static boolean isTriggerBlock(BlockState state) {
 		return state.isIn(BlockTags.WOODEN_TRAPDOORS)
 				|| state.isIn(BlockTags.WOODEN_DOORS)
 				|| state.isOf(Blocks.LEVER)

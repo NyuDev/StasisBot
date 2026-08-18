@@ -47,6 +47,25 @@ public final class PearlDetector {
 	}
 
 	/**
+	 * The position of the pearl suspended in {@code chamber} and owned by it (its trigger is the
+	 * nearest one), or {@code null} when there is none. Used at fire time to open the trapdoor the
+	 * pearl actually rests on when a stasis has several trapdoors.
+	 */
+	public Vec3d ownPearlPos(ClientWorld world, StasisChamber chamber, List<StasisChamber> allChambers) {
+		double r = config.pearlSearchRadius();
+		Vec3d centre = Vec3d.ofCenter(chamber.trigger());
+		Box box = Box.of(centre, r * 2, r * 2, r * 2);
+		double rSq = r * r;
+		var pearls = world.getEntitiesByType(EntityType.ENDER_PEARL, box,
+				pearl -> pearl.squaredDistanceTo(centre) <= rSq);
+		for (var pearl : pearls) {
+			Vec3d pearlPos = new Vec3d(pearl.getX(), pearl.getY(), pearl.getZ());
+			if (ownsPearl(chamber, allChambers, pearlPos)) return pearlPos;
+		}
+		return null;
+	}
+
+	/**
 	 * The name of the player who owns the pearl currently suspended in {@code chamber}
 	 * (i.e. the one who threw it), or {@code null} when there is no pearl here or its
 	 * owner can't be resolved (thrower not loaded). Used to spot a pearl placed in the

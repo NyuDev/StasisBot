@@ -53,10 +53,10 @@ public final class StasisBotConfig {
 	 */
 	private List<String> triggerWords;
 
-	/** Radius, in chunks, around the bot to look at for chambers. */
+	/** Radius, in chunks, around the bot to look at for chambers (a floor — see {@link #effectiveScanChunkRadius()}). */
 	private int scanChunkRadius = 2;
 	/** Ignore signs farther than this many blocks from the bot. */
-	private int maxChamberDistance = 24;
+	private int maxChamberDistance = 96;
 	/** How far from a sign to look for its lever/button. */
 	private int triggerSearchRadius = 3;
 	/** How close an ender pearl must be to a chamber to count as "loaded". */
@@ -253,6 +253,16 @@ public final class StasisBotConfig {
 
 	public int scanChunkRadius() { return scanChunkRadius; }
 	public int maxChamberDistance() { return maxChamberDistance; }
+	/**
+	 * The chunk radius a scan must actually cover so it never clips {@link #maxChamberDistance()}:
+	 * the larger of the configured floor and the chunks the block distance spans. This is what the
+	 * scanner (and the "gone while in view" check) use, so bumping the block distance alone widens
+	 * detection without having to also tune the chunk radius by hand.
+	 */
+	public int effectiveScanChunkRadius() {
+		int fromBlocks = (int) Math.ceil(maxChamberDistance / 16.0);
+		return Math.max(scanChunkRadius, fromBlocks);
+	}
 	public int triggerSearchRadius() { return triggerSearchRadius; }
 	public double pearlSearchRadius() { return pearlSearchRadius; }
 	public long indexTtlMillis() { return indexTtlMillis; }
@@ -777,7 +787,7 @@ public final class StasisBotConfig {
 			if (e.output == null || (!"dm".equals(e.output) && !"discord".equals(e.output))) e.output = "dm";
 		});
 		if (scanChunkRadius < 1) scanChunkRadius = 1;
-		if (maxChamberDistance < 1) maxChamberDistance = 24;
+		if (maxChamberDistance < 1) maxChamberDistance = 96;
 		if (triggerSearchRadius < 1) triggerSearchRadius = 3;
 		if (pearlSearchRadius <= 0) pearlSearchRadius = 4.0;
 		if (indexTtlMillis < 0) indexTtlMillis = 3000L;

@@ -92,6 +92,7 @@ public final class HomeService {
 	private List<StasisChamber> candidates = new ArrayList<>();
 	private int candidateIdx = 0;
 	private StasisChamber currentTarget;
+	private BlockPos firedTrigger;    // the trapdoor actually opened (pearl-resolved), for re-arm/verify
 
 	private BlockPos returnTarget;    // where it should walk back to
 	private boolean teleportConfirmed;
@@ -410,13 +411,17 @@ public final class HomeService {
 		ClientPlayerEntity self = client.player;
 		if (world == null || self == null) return false;
 		BlockPos trigger = new BlockPos(x, y, z);
-		for (StasisChamber c : index.chambers(world, self.getBlockPos())) {
+		List<StasisChamber> all = index.chambers(world, self.getBlockPos());
+		for (StasisChamber c : all) {
 			if (c.trigger().equals(trigger)) {
-				if (self.getEyePos().distanceTo(Vec3d.ofCenter(trigger)) > config.reach()) {
+				// Open the trapdoor under the pearl (multi-trapdoor stasis), else the sign-paired one.
+				Vec3d pearlPos = pearls.ownPearlPos(world, c, all);
+				BlockPos toFire = activator.resolveTrigger(world, c, pearlPos);
+				if (self.getEyePos().distanceTo(Vec3d.ofCenter(toFire)) > config.reach()) {
 					StasisBot.LOGGER.info("[control] remote-fire '{}' skipped — out of reach", c.label());
 					return false;
 				}
-				boolean ok = activator.fire(client, c);
+				boolean ok = activator.fireAt(client, toFire);
 				if (ok) botActivity.markTriggerUse();
 				StasisBot.LOGGER.info("[control] remote-fired chamber '{}' -> {}", c.label(), ok);
 				return ok;
@@ -771,9 +776,14 @@ public final class HomeService {
 			return;
 		}
 
-		if (activator.fire(client, currentTarget)) {
+		// Open the trapdoor the pearl actually rests on (a stasis can have several); fall back to
+		// the sign-paired trigger when the pearl can't be located. Remember it for the re-arm.
+		Vec3d pearlPos = pearls.ownPearlPos(world, currentTarget, all);
+		BlockPos triggerToFire = activator.resolveTrigger(world, currentTarget, pearlPos);
+		if (activator.fireAt(client, triggerToFire)) {
+			firedTrigger = triggerToFire;
 			botActivity.markTriggerUse(); // our own toggle — not a player opening the stasis
-			StasisBot.LOGGER.info("Fired '{}' for '{}'", currentTarget.label(), currentSender);
+			StasisBot.LOGGER.info("Fired '{}' for '{}' (trapdoor {})", currentTarget.label(), currentSender, triggerToFire.toShortString());
 			feedback.debug(currentSender + ": fired '" + currentTarget.label() + "'");
 			feedback.notifySelf("§a[StasisBot] §f" + currentSender + "§a → released §f" + currentTarget.label());
 			discordPlayer(DiscordEvent.STASIS_FIRED, currentSender,
@@ -790,7 +800,8 @@ public final class HomeService {
 	private void driveVerify() {
 		if (client.world == null || client.player == null || currentTarget == null) { startReturn(); return; }
 
-		if (PlayerPresence.hasArrived(client, currentSender, currentTarget.trigger(), ARRIVAL_RADIUS)) {
+		BlockPos arrivalPos = firedTrigger != null ? firedTrigger : currentTarget.trigger();
+		if (PlayerPresence.hasArrived(client, currentSender, arrivalPos, ARRIVAL_RADIUS)) {
 			teleportConfirmed = true;
 			feedback.whisper(currentSender, Messages.Key.DONE);
 			feedback.debug("TP confirmed for " + currentSender + " — re-arming the trap now");
@@ -872,7 +883,8 @@ public final class HomeService {
 		// own pearl), don't touch it — just head home. Toggling it now would close their
 		// freshly-armed trap and could even re-teleport them. Trapdoor triggers only; for
 		// levers/buttons we can't read the state, so the normal flow below applies.
-		if (Boolean.TRUE.equals(TrapState.isOpen(client.world, currentTarget.trigger()))) {
+		BlockPos armTrigger = firedTrigger != null ? firedTrigger : currentTarget.trigger();
+		if (Boolean.TRUE.equals(TrapState.isOpen(client.world, armTrigger))) {
 			feedback.debug("Player re-armed the trap themselves — leaving without touching it");
 			startReturn();
 			return;
@@ -884,7 +896,7 @@ public final class HomeService {
 		// pearl that pulled them here was already consumed by the fire, so this can never
 		// re-teleport them.
 		if (config.reopenTrigger() && inReach(self, currentTarget)) {
-			activator.fire(client, currentTarget);
+			activator.fireAt(client, armTrigger);
 			botActivity.markTriggerUse(); // our own re-arm — not a player closing the stasis
 			feedback.debug("Reopened the trap for " + currentSender);
 			discordPlayer(DiscordEvent.STASIS_REOPENED, currentSender,
@@ -1053,6 +1065,7 @@ public final class HomeService {
 		// only place that clears it, after the bot actually returns home.
 		restock.reset();
 		returnTarget = null;
+		firedTrigger = null;
 		manual.clear();
 		teleportConfirmed = false;
 		pearlGiven = false;

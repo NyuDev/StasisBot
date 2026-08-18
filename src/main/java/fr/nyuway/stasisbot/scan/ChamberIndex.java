@@ -125,7 +125,7 @@ public final class ChamberIndex {
 	 */
 	private boolean isScannable(ClientWorld world, BlockPos origin, BlockPos sign) {
 		if (world == null) return false;
-		int r = config.scanChunkRadius();
+		int r = config.effectiveScanChunkRadius();
 		int ocx = origin.getX() >> 4, ocz = origin.getZ() >> 4;
 		int scx = sign.getX() >> 4, scz = sign.getZ() >> 4;
 		if (Math.abs(scx - ocx) > r || Math.abs(scz - ocz) > r) return false;
