@@ -44,6 +44,7 @@ public final class StasisMonitorScreen extends Screen {
 			{"online", "Require online"},
 			{"skip", "Skip if present"},
 			{"lockhome", "Lock at home"},
+			{"dmonly", "Triggers DM-only"},
 			{"members", "Members ctrl"},
 			{"debug", "Debug"},
 	};
@@ -173,6 +174,7 @@ public final class StasisMonitorScreen extends Screen {
 			case "online" -> config.requireOnline();
 			case "skip" -> config.skipIfPresent();
 			case "lockhome" -> config.lockAtHome();
+			case "dmonly" -> config.triggersDmOnly();
 			case "members" -> config.baseMembersControl();
 			case "debug" -> config.debug();
 			case "baritone" -> config.useBaritone();
@@ -190,6 +192,7 @@ public final class StasisMonitorScreen extends Screen {
 			case "online" -> config.setRequireOnline(v);
 			case "skip" -> config.setSkipIfPresent(v);
 			case "lockhome" -> config.setLockAtHome(v);
+			case "dmonly" -> config.setTriggersDmOnly(v);
 			case "members" -> config.setBaseMembersControl(v);
 			case "debug" -> config.setDebug(v);
 			case "baritone" -> config.setUseBaritone(v);
@@ -213,7 +216,7 @@ public final class StasisMonitorScreen extends Screen {
 		int bw = 150;
 		int x = width - bw - 20;
 		int top = 28;
-		int count = 18;
+		int count = 19;
 		int avail = height - top - 34;
 		int step = Math.max(15, Math.min(22, avail / count));
 		int bh = Math.min(20, step - 2);

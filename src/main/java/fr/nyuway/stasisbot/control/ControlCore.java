@@ -27,6 +27,7 @@ public final class ControlCore {
 		kv(sb, "reqmember", config.requireBaseMemberForHome());
 		kv(sb, "skip", config.skipIfPresent());
 		kv(sb, "lockhome", config.lockAtHome());
+		kv(sb, "dmonly", config.triggersDmOnly());
 		kv(sb, "debug", config.debug());
 		kv(sb, "baritone", config.useBaritone());
 		kv(sb, "discord", config.discordEnabled());

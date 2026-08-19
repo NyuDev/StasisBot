@@ -116,6 +116,11 @@ public final class StasisBotConfig {
 	 * trigger word from being processed or announced to Discord.
 	 */
 	private boolean requireBaseMemberForHome = true;
+	/**
+	 * When true, only honour a trigger word received as a private message (DM) — public chat
+	 * that starts with a trigger word is ignored. Off by default (both DM and public chat fire).
+	 */
+	private boolean triggersDmOnly = false;
 	/** Treat the server as lagging when client ticks stall beyond this (ms). */
 	private long lagThresholdMillis = 250L;
 	/** How long (ms) to wait for the player to actually appear after firing. */
@@ -245,8 +250,13 @@ public final class StasisBotConfig {
 		for (String w : triggerWords()) {
 			if (w.isBlank()) continue;
 			String word = w.toLowerCase(Locale.ROOT);
-			if (b.equals(word)) return true;
-			if (b.startsWith(word) && Character.isWhitespace(b.charAt(word.length()))) return true;
+			if (!b.startsWith(word)) continue;
+			// The trigger must be the whole FIRST word: nothing may extend it into a
+			// longer word. End-of-message, whitespace or ANY punctuation ends the word,
+			// so "warp", "warp!", "warp!!! now" all fire; only a letter/digit right
+			// after keeps it one word, so "warping" never fires.
+			if (b.length() == word.length()) return true;
+			if (!Character.isLetterOrDigit(b.charAt(word.length()))) return true;
 		}
 		return false;
 	}
@@ -293,6 +303,7 @@ public final class StasisBotConfig {
 	public boolean skipIfPresent() { return skipIfPresent; }
 	public boolean lockAtHome() { return lockAtHome; }
 	public boolean requireBaseMemberForHome() { return requireBaseMemberForHome; }
+	public boolean triggersDmOnly() { return triggersDmOnly; }
 	public boolean controllerMode() { return controllerMode; }
 	public String controlSecret() { return controlSecret == null ? "" : controlSecret.trim(); }
 	public String controlBotName() { return controlBotName == null ? "" : controlBotName.trim(); }
@@ -487,6 +498,7 @@ public final class StasisBotConfig {
 	public boolean appendRandomChars() { return appendRandomChars; }
 
 	public void setRequireBaseMemberForHome(boolean v) { this.requireBaseMemberForHome = v; save(); }
+	public void setTriggersDmOnly(boolean v) { this.triggersDmOnly = v; save(); }
 	public void setLogAllChat(boolean v) { this.logAllChat = v; save(); }
 	public void setChatWebhookUrl(String v) { this.chatWebhookUrl = v == null ? "" : v.trim(); save(); }
 	public void setAlertOutsiders(boolean v) { this.alertOutsiders = v; save(); }
@@ -719,6 +731,7 @@ public final class StasisBotConfig {
 		this.skipIfPresent = o.skipIfPresent;
 		this.lockAtHome = o.lockAtHome;
 		this.requireBaseMemberForHome = o.requireBaseMemberForHome;
+		this.triggersDmOnly = o.triggersDmOnly;
 		this.controllerMode = o.controllerMode;
 		this.controlSecret = o.controlSecret;
 		this.controlBotName = o.controlBotName;

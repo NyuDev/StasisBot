@@ -61,6 +61,7 @@ public final class MasterCommands {
 			case "master" -> { if (value == null) return bad(key); config.setMaster(value); return set("master", config.master()); }
 			case "returnpos" -> { return returnPos(config, parts); }
 			case "reqmember" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setRequireBaseMemberForHome(v); return set("reqmember", on(v)); }
+			case "dmonly" -> { Boolean v = bool(value); if (v == null) return bad(key); config.setTriggersDmOnly(v); return set("dmonly", on(v)); }
 			case "watch" -> { return watch(config, parts); }
 			case "unwatch" -> {
 				if (value == null) return bad(key);

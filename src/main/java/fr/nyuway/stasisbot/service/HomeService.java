@@ -172,7 +172,13 @@ public final class HomeService {
 			client.execute(() -> { if (isBaseMember(s) || config.isMaster(s)) handleMemberWatch(s, b); });
 			return;
 		}
-		if (containsTrigger(body)) onHomeRequest(sender, body, dm);
+		if (containsTrigger(body)) {
+			if (config.triggersDmOnly() && !dm) {
+				if (config.debug()) StasisBot.LOGGER.info("[home] '{}' trigger in public chat ignored (DM-only mode)", sender);
+				return;
+			}
+			onHomeRequest(sender, body, dm);
+		}
 	}
 
 	private static boolean isMemberWatchCommand(String body) {
