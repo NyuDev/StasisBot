@@ -121,6 +121,12 @@ public final class StasisBotConfig {
 	 * that starts with a trigger word is ignored. Off by default (both DM and public chat fire).
 	 */
 	private boolean triggersDmOnly = false;
+	/**
+	 * Persisted so a manual disconnect survives a restart. When true the bot stays OFF the
+	 * server and auto-reconnect does nothing, even across a container/self-heal restart — a
+	 * manual "Disconnect" must not be undone by a restart. Cleared on the next manual connect.
+	 */
+	private boolean stayDisconnected = false;
 	/** Treat the server as lagging when client ticks stall beyond this (ms). */
 	private long lagThresholdMillis = 250L;
 	/** How long (ms) to wait for the player to actually appear after firing. */
@@ -304,6 +310,7 @@ public final class StasisBotConfig {
 	public boolean lockAtHome() { return lockAtHome; }
 	public boolean requireBaseMemberForHome() { return requireBaseMemberForHome; }
 	public boolean triggersDmOnly() { return triggersDmOnly; }
+	public boolean stayDisconnected() { return stayDisconnected; }
 	public boolean controllerMode() { return controllerMode; }
 	public String controlSecret() { return controlSecret == null ? "" : controlSecret.trim(); }
 	public String controlBotName() { return controlBotName == null ? "" : controlBotName.trim(); }
@@ -499,6 +506,7 @@ public final class StasisBotConfig {
 
 	public void setRequireBaseMemberForHome(boolean v) { this.requireBaseMemberForHome = v; save(); }
 	public void setTriggersDmOnly(boolean v) { this.triggersDmOnly = v; save(); }
+	public void setStayDisconnected(boolean v) { this.stayDisconnected = v; save(); }
 	public void setLogAllChat(boolean v) { this.logAllChat = v; save(); }
 	public void setChatWebhookUrl(String v) { this.chatWebhookUrl = v == null ? "" : v.trim(); save(); }
 	public void setAlertOutsiders(boolean v) { this.alertOutsiders = v; save(); }
@@ -732,6 +740,7 @@ public final class StasisBotConfig {
 		this.lockAtHome = o.lockAtHome;
 		this.requireBaseMemberForHome = o.requireBaseMemberForHome;
 		this.triggersDmOnly = o.triggersDmOnly;
+		this.stayDisconnected = o.stayDisconnected;
 		this.controllerMode = o.controllerMode;
 		this.controlSecret = o.controlSecret;
 		this.controlBotName = o.controlBotName;

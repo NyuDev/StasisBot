@@ -108,6 +108,12 @@ public final class StasisBotClient implements ClientModInitializer {
 		DeathWatcher deathWatcher = new DeathWatcher(client, config, index, identity, discord, presence, deathInfo);
 		EntityWatcher entityWatcher = new EntityWatcher(client, config, index, identity, discord, settle);
 		AutoReconnect autoReconnect = new AutoReconnect(client);
+		// A manual "Disconnect" persists across restarts: if the operator left the bot off,
+		// don't let a container/self-heal restart quietly rejoin it.
+		if (config.stayDisconnected()) {
+			autoReconnect.setEnabled(false);
+			StasisBot.LOGGER.info("[auto-connect] staying disconnected — manual disconnect persists across restart");
+		}
 		ConfigWatcher configWatcher = new ConfigWatcher(config);
 		SurveillanceService surveillance = new SurveillanceService(client, config, discord);
 		ChatTap chatTap = new ChatTap();
@@ -191,10 +197,12 @@ public final class StasisBotClient implements ClientModInitializer {
 					@Override public void homeRequest(String player) { homeService.onHomeRequest(player, "", false); }
 					@Override public void serverDisconnect() {
 						autoReconnect.setEnabled(false);
+						config.setStayDisconnected(true); // survive restarts — don't auto-rejoin
 						var nh = client.getNetworkHandler();
 						if (nh != null) nh.getConnection().disconnect(net.minecraft.text.Text.literal("StasisBot: remote disconnect"));
 					}
 					@Override public void serverConnect(String hostPort) {
+						config.setStayDisconnected(false); // explicit connect clears the manual-off state
 						if (hostPort != null && !hostPort.isBlank()) autoReconnect.setServer(hostPort);
 						var nh = client.getNetworkHandler();
 						if (nh != null) nh.getConnection().disconnect(net.minecraft.text.Text.literal("StasisBot: switching server"));
