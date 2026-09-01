@@ -205,8 +205,20 @@ public final class StasisBotClient implements ClientModInitializer {
 						config.setStayDisconnected(false); // explicit connect clears the manual-off state
 						if (hostPort != null && !hostPort.isBlank()) autoReconnect.setServer(hostPort);
 						var nh = client.getNetworkHandler();
+						boolean online = client.world != null || nh != null;
 						if (nh != null) nh.getConnection().disconnect(net.minecraft.text.Text.literal("StasisBot: switching server"));
-						autoReconnect.connectNow();
+						// DevAuth only mints a session token at launch, so after ~a day the cached one is
+						// stale and an in-process rejoin just 401s. When we're offline and the JVM has been
+						// up long enough that the token has likely expired, restart to refresh it (Docker
+						// brings us back, DevAuth re-auths, auto-connect rejoins). Otherwise reconnect in
+						// place — instant, and no needless restart for a quick disconnect/reconnect.
+						long uptimeH = java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime() / 3600_000L;
+						if (!online && uptimeH >= 20 && System.getenv("STASIS_SERVER") != null) {
+							StasisBot.LOGGER.info("[control] reconnect after {}h uptime — restarting to refresh the session", uptimeH);
+							client.scheduleStop();
+						} else {
+							autoReconnect.connectNow();
+						}
 					}
 				});
 

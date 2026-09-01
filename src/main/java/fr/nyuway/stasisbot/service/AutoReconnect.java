@@ -46,9 +46,11 @@ public final class AutoReconnect {
 	 * the token from the stored Microsoft refresh token and the bot rejoins on its
 	 * own. Reset to 0 the moment a connection actually succeeds, so ordinary 2b2t
 	 * disconnects (queue drops, kicks) never trip it — only a truly dead session,
-	 * which fails every single attempt, climbs this far. 20 attempts x 30 s ≈ 10 min.
+	 * which fails every single attempt, climbs this far. A climbing counter means the
+	 * bot never even reached the queue (a 401), so a low threshold is safe: 6 attempts
+	 * x 30 s ≈ 3 min, fast enough that a stale token self-heals without a long wait.
 	 */
-	private static final int MAX_FAILED_ATTEMPTS = 20;
+	private static final int MAX_FAILED_ATTEMPTS = 6;
 
 	private final MinecraftClient client;
 	private volatile String server;
