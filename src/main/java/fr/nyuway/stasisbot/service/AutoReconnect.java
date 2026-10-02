@@ -7,6 +7,7 @@ import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.screen.multiplayer.ConnectScreen;
 import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.network.ServerInfo;
+import net.minecraft.text.Text;
 
 /**
  * Headless auto-connect / auto-reconnect.
@@ -59,6 +60,7 @@ public final class AutoReconnect {
 	private int connectScreenTicks = 0;
 	private int failedAttempts = 0;
 	private boolean restartRequested = false;
+	private boolean stayOffDropIssued = false; // already dropped a quickPlay auto-join while disabled?
 
 	public AutoReconnect(MinecraftClient client) {
 		this.client = client;
@@ -87,8 +89,25 @@ public final class AutoReconnect {
 	public void connectNow() { this.enabled = true; this.cooldown = 0; this.failedAttempts = 0; }
 
 	public void tick() {
-		if (server == null || !enabled) {
-			return; // not a headless run, or auto-reconnect disabled; leave it alone
+		if (server == null) {
+			return; // not a headless run; leave it alone
+		}
+		if (!enabled) {
+			// Auto-reconnect is off (a persisted manual disconnect, or the operator left it off).
+			// We must stay OFF the server — but the headless launch's vanilla quickPlay
+			// (--quickPlayMultiplayer) joins once at boot regardless of us, so drop any session we
+			// find ourselves in. Without this, "stay disconnected" didn't actually keep the bot off.
+			var nh = client.getNetworkHandler();
+			if (nh != null) {
+				if (!stayOffDropIssued) {
+					StasisBot.LOGGER.info("[auto-connect] disabled — dropping the quickPlay auto-join (staying offline)");
+					nh.getConnection().disconnect(Text.literal("StasisBot: staying disconnected"));
+					stayOffDropIssued = true;
+				}
+			} else {
+				stayOffDropIssued = false; // offline now — ready to catch any future stray join
+			}
+			return;
 		}
 		if (client.world != null || client.getNetworkHandler() != null) {
 			connectScreenTicks = 0;
